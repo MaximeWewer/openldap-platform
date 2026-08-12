@@ -48,7 +48,7 @@ spec:
             severity: warning
           annotations:
             summary: "OpenLDAP replication lag > 60s ({{ "{{" }} $labels.instance {{ "}}" }})"
-            description: "Peer {{ "{{" }} $labels.peer {{ "}}" }} lag is above 60s for 10m — check network + syncrepl session log."
+            description: "Peer {{ "{{" }} $labels.peer {{ "}}" }} lag is above 60s for 10m - check network + syncrepl session log."
 
         - alert: OpenLDAPAccountLockouts
           expr: increase(openldap_accesslog_account_lock_events_total[5m]) > 3
@@ -57,6 +57,6 @@ spec:
             severity: warning
           annotations:
             summary: "OpenLDAP account lockouts detected"
-            description: "{{ "{{" }} $value {{ "}}" }} account lockout events in the last 5 minutes — possible brute-force or misconfigured client."
+            description: "{{ "{{" }} $value {{ "}}" }} account lockout events in the last 5 minutes - possible brute-force or misconfigured client."
     {{- end }}
 {{- end }}

@@ -1,7 +1,7 @@
 apiVersion: v2
 name: self-service-password
 description: |
-  LDAP Tool Box Self Service Password — end-user password change / reset UI.
+  LDAP Tool Box Self Service Password - end-user password change / reset UI.
   Config file (config.inc.local.php) rendered from values; binds against
   the sibling openldap subchart's Service by default.
 type: application

@@ -3,7 +3,7 @@ Shell scripts used by the sync Jobs. All three (ppolicy / users / groups)
 share the same base image (alpine) and the same tooling boot: apk install,
 download openldap-cli + kubectl, then run one of the scripts below.
 
-Each script is idempotent — safe to re-run on every `helm upgrade`.
+Each script is idempotent - safe to re-run on every `helm upgrade`.
 */ -}}
 {{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled -}}
 {{- $suffix := .Values.directory.suffix -}}
@@ -22,7 +22,7 @@ metadata:
 data:
 
   # ---------------------------------------------------------------------------
-  # common.sh — sourced by every sync script.
+  # common.sh - sourced by every sync script.
   #   * installs runtime tools (openldap-cli, kubectl, curl, jq)
   #   * writes ~/.openldap-cli.yaml with the release's admin binding
   #   * waits for LDAP to accept binds
@@ -43,7 +43,7 @@ data:
 
     if ! command -v openldap-cli >/dev/null 2>&1; then
       LOG "Installing tooling (apk + openldap-cli ${CLI_VERSION} + kubectl ${KUBECTL_VERSION})"
-      # Retry apk — mirrors are occasionally slow / transiently unreachable.
+      # Retry apk - mirrors are occasionally slow / transiently unreachable.
       APK_TRIES=0
       until apk add --no-cache curl ca-certificates jq openssl >/dev/null 2>&1; do
         APK_TRIES=$((APK_TRIES + 1))
@@ -127,7 +127,7 @@ data:
     gen_password() { openssl rand -base64 24 | tr -d '=/+' | head -c 24; }
 
     # -------------------------------------------------------------------------
-    # cn=config bind — required by acls / tree-grants / overlays / acl-lint.
+    # cn=config bind - required by acls / tree-grants / overlays / acl-lint.
     # Sourced only when the caller sets `NEED_CONFIG_BIND=1` to keep other
     # scripts on the plain admin bind.
     # -------------------------------------------------------------------------
@@ -140,7 +140,7 @@ data:
     }
 
     # -------------------------------------------------------------------------
-    # Chart state ConfigMap helpers — used by acls / tree-grants / overlays
+    # Chart state ConfigMap helpers - used by acls / tree-grants / overlays
     # to track their previously-applied set across upgrades. Data key = phase
     # name (acls | tree-grants | overlays).
     # -------------------------------------------------------------------------
@@ -170,7 +170,7 @@ data:
     }
 
   # ---------------------------------------------------------------------------
-  # ppolicy.sh — reconciles ppolicy templates under ou=policies.
+  # ppolicy.sh - reconciles ppolicy templates under ou=policies.
   # ---------------------------------------------------------------------------
   ppolicy.sh: |
     #!/bin/sh
@@ -201,7 +201,7 @@ data:
     LOG "ppolicy sync done"
 
   # ---------------------------------------------------------------------------
-  # users.sh — reconciles users under ou=users.
+  # users.sh - reconciles users under ou=users.
   #   * create-or-update every user in values.users
   #   * store generated passwords in per-user Secrets (kubernetes backend)
   #   * on removal from values.users, either delete or lock based on
@@ -217,7 +217,7 @@ data:
     COUNT=$(jq 'length' /spec/users.json 2>/dev/null || echo 0)
     LOG "reconciling ${COUNT} user(s)"
 
-    # Track which uids we own (from values) — used later for drift cleanup.
+    # Track which uids we own (from values) - used later for drift cleanup.
     DECLARED=/tmp/declared-users.txt
     : > "$DECLARED"
 
@@ -240,7 +240,7 @@ data:
       ' /spec/users.json 2>/dev/null || true)
 
       if openldap-cli user info "$UID_VAL" >/dev/null 2>&1; then
-        LOG "user ${UID_VAL}: exists — reconciling attributes"
+        LOG "user ${UID_VAL}: exists - reconciling attributes"
         [ -n "$GIVEN" ]   && openldap-cli user set "$UID_VAL" givenName "$GIVEN"
         [ -n "$SN" ]      && openldap-cli user set "$UID_VAL" sn "$SN"
         [ -n "$MAIL" ]    && openldap-cli user set "$UID_VAL" mail "$MAIL"
@@ -263,7 +263,7 @@ data:
           PW=$(gen_password)
         fi
 
-        # Build `--set k=v` pairs — repeated flag, space-separated args.
+        # Build `--set k=v` pairs - repeated flag, space-separated args.
         set -- "$UID_VAL" --password "$PW"
         [ -n "$GIVEN" ]   && set -- "$@" --set "givenName=$GIVEN"
         [ -n "$SN" ]      && set -- "$@" --set "sn=$SN"
@@ -291,7 +291,7 @@ data:
     # Drift: any user with the label openldap.platform/release=${RELEASE_NAME}
     # (i.e. previously created by this chart) that is no longer declared →
     # delete or lock per onUserRemove.
-    LOG "checking drift — onUserRemove=${ON_USER_REMOVE}"
+    LOG "checking drift - onUserRemove=${ON_USER_REMOVE}"
     KNOWN=$(kubectl -n "${RELEASE_NAMESPACE}" get secrets \
               -l "openldap.platform/release=${RELEASE_NAME},app.kubernetes.io/component=user-credentials" \
               -o jsonpath='{range .items[*]}{.metadata.labels.openldap\.stack/user}{"\n"}{end}' \
@@ -317,7 +317,7 @@ data:
     LOG "users sync done"
 
   # ---------------------------------------------------------------------------
-  # groups.sh — reconciles groupOfNames entries under ou=groups.
+  # groups.sh - reconciles groupOfNames entries under ou=groups.
   # ---------------------------------------------------------------------------
   groups.sh: |
     #!/bin/sh
@@ -344,7 +344,7 @@ data:
       DESC=$(jq -r ".[$i].description // empty" /spec/groups.json)
 
       if openldap-cli group info "$CN" >/dev/null 2>&1; then
-        LOG "group ${CN}: exists — reconciling members"
+        LOG "group ${CN}: exists - reconciling members"
         # Current members: extract UID (RDN value) from each member DN
         # (member: cn=alice,ou=users,...).
         CURRENT=$(openldap-cli group info "$CN" -o json 2>/dev/null \
@@ -386,7 +386,7 @@ data:
       i=$((i + 1))
     done
 
-    LOG "checking drift — onGroupRemove=${ON_GROUP_REMOVE}"
+    LOG "checking drift - onGroupRemove=${ON_GROUP_REMOVE}"
     # groups list text form: one CN per line, plus a trailing "(N groups)" tally.
     KNOWN=$(openldap-cli groups list 2>/dev/null | grep -v '^(' | grep -v '^$' || true)
     for cn in $KNOWN; do
@@ -404,7 +404,7 @@ data:
     LOG "groups sync done"
 
   # ---------------------------------------------------------------------------
-  # backup.sh — dump the data + config databases to /backup as gzipped LDIF.
+  # backup.sh - dump the data + config databases to /backup as gzipped LDIF.
   #   * File names follow the values `backup.fileNamePattern` (already resolved
   #     into KIND_FILENAME / DATA_FILENAME env vars by the CronJob spec).
   #   * Retention: after a successful dump, prune files older than
@@ -426,7 +426,7 @@ data:
     openldap-cli backup data /backup/"${DATA_FILENAME}" $DATA_ARGS
 
     LOG "backup config -> /backup/${CONFIG_FILENAME}"
-    # config backup requires the cn=config admin — inject its creds temporarily.
+    # config backup requires the cn=config admin - inject its creds temporarily.
     LDAP_CONFIG_BIND_DN="${LDAP_CONFIG_BIND_DN:-cn=adminconfig,cn=config}" \
     LDAP_CONFIG_BIND_PW="$(cat /secrets/config-admin-password)" \
       openldap-cli backup config /backup/"${CONFIG_FILENAME}"
@@ -438,7 +438,7 @@ data:
     LOG "backup done"
 
   # ---------------------------------------------------------------------------
-  # accesslog-purge.sh — reclaim cn=accesslog MDB space.
+  # accesslog-purge.sh - reclaim cn=accesslog MDB space.
   #   `--sweep DD+HH:MM`  drives how often + how deep slapd purges.
   #   `--keep-days N`     minimum retention.
   #   `--dry-run`         no writes, only report what would be deleted.
@@ -463,7 +463,7 @@ data:
     LOG "accesslog purge done"
 
   # ---------------------------------------------------------------------------
-  # overlays.sh — reconciles overlays via `openldap-cli config overlay
+  # overlays.sh - reconciles overlays via `openldap-cli config overlay
   # enable|disable`. Runs BEFORE ppolicy/users/groups so overlays enabled here
   # (memberof, refint, ppolicy, …) are available when those jobs run.
   # State is tracked in ConfigMap ${RELEASE}-openldap-sync-state key `overlays`.
@@ -515,7 +515,7 @@ data:
     done
 
     # Drift: overlays previously enabled by the chart but no longer declared
-    # are DISABLED (never purged automatically — data loss risk).
+    # are DISABLED (never purged automatically - data loss risk).
     LOG "checking drift for removed overlays"
     REMOVED=$(jq -c --slurpfile decl "$DECLARED" \
       '[.[] as $p | $decl[0] | map(.name == $p.name and .database == $p.database) | any | not | select(.) | $p]' \
@@ -534,7 +534,7 @@ data:
     LOG "overlays sync done"
 
   # ---------------------------------------------------------------------------
-  # acls.sh — reconciles declarative olcAccess clauses via `openldap-cli config
+  # acls.sh - reconciles declarative olcAccess clauses via `openldap-cli config
   # acl grant/revoke`. Each entry owns ONE grantee (group|dn); reconcile always
   # revokes-then-grants so the resulting rule matches the declared shape.
   # State (grantees × databases) tracked in ConfigMap key `acls`.
@@ -623,7 +623,7 @@ data:
     LOG "acls sync done"
 
   # ---------------------------------------------------------------------------
-  # tree-grants.sh — reconciles svc grants (container + entry rules).
+  # tree-grants.sh - reconciles svc grants (container + entry rules).
   # Identity = (name, tree). Removed entries are revoked with --tree so
   # co-grantees keep their rules.
   # ---------------------------------------------------------------------------
@@ -681,7 +681,7 @@ data:
     LOG "tree grants sync done"
 
   # ---------------------------------------------------------------------------
-  # acl-lint.sh — periodic `config acl lint`. Exits non-zero when unreachable /
+  # acl-lint.sh - periodic `config acl lint`. Exits non-zero when unreachable /
   # no-op rules are reported so the CronJob shows Failed and can page.
   # ---------------------------------------------------------------------------
   acl-lint.sh: |
@@ -704,7 +704,7 @@ data:
     done
 
     if [ "$FAILED" -eq 1 ]; then
-      DIE "ACL lint reported unreachable or no-op rules — see logs"
+      DIE "ACL lint reported unreachable or no-op rules - see logs"
     fi
     LOG "acl lint clean"
 {{- end }}

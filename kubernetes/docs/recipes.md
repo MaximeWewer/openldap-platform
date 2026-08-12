@@ -9,7 +9,7 @@ helm upgrade --install ldap kubernetes/charts/openldap-platform \
   -f my-values.yaml
 ```
 
-## 1. Dev / PoC — single pod, no TLS, no ingress
+## 1. Dev / PoC - single pod, no TLS, no ingress
 
 Fastest install for a local minikube / kind cluster. No credentials survive
 uninstall unless you keep the release name (Secrets are annotated
@@ -40,7 +40,7 @@ phpldapadmin:
   enabled: true       # port-forward svc/ldap-phpldapadmin 8080:8080
 ```
 
-## 2. Small prod — mirror HA, cert-manager, backup, monitoring
+## 2. Small prod - mirror HA, cert-manager, backup, monitoring
 
 Two-node active/passive on a single cluster, LDAPS via cert-manager,
 nightly backups on a 20Gi PVC, Prometheus scrape.
@@ -92,7 +92,7 @@ openldap:
     prometheusRule:
       enabled: true
 
-  # Overlays, ppolicy, users, groups, ACLs and tree-scoped grants — all
+  # Overlays, ppolicy, users, groups, ACLs and tree-scoped grants - all
   # reconciled on every helm upgrade by the sync Jobs (weight order:
   # overlays 4, ppolicy 5, acls 8, tree-grants 9, users 10, groups 15).
   # Drift removal for acls/treeGrants/overlays uses a chart-managed
@@ -140,12 +140,12 @@ openldap:
     - name: grafana-svc
       tree: ou=users,dc=example,dc=org
       access: read
-  aclLintCronJob:                      # daily `config acl lint` — fails on shadowed rules
+  aclLintCronJob:                      # daily `config acl lint` - fails on shadowed rules
     enabled: true
     schedule: "0 6 * * *"
 ```
 
-## 3. Multi-DC prod — 3 nodes × 2 clusters, external peers
+## 3. Multi-DC prod - 3 nodes × 2 clusters, external peers
 
 Two Kubernetes clusters (`dc1`, `dc2`) run 3 replicas each, forming a
 6-way multi-master mesh. Shared CA + shared replicator credentials
@@ -197,20 +197,20 @@ openldap:
       - 203.0.113.0/24                         # dc2 public range
 ```
 
-**dc2 overlay** — same as dc1 with three flipped keys:
+**dc2 overlay** - same as dc1 with three flipped keys:
 
 ```yaml
 openldap:
   replication:
     serverIdBase: 10                           # distinct decade
-    seedOnOrdinalZeroOnly: false               # DO NOT re-seed — pull from dc1
+    seedOnOrdinalZeroOnly: false               # DO NOT re-seed - pull from dc1
     externalPeers:
       - ldaps://ldap.dc1.example.org:636
   ingress:
     host: ldap.dc2.example.org
 ```
 
-## 4. GitOps-managed — Argo CD driving the chart
+## 4. GitOps-managed - Argo CD driving the chart
 
 Chart values live in the same repo, split per environment. Argo CD
 Application manifest at [`../gitops/argocd/application.yaml`](../gitops/argocd/application.yaml).
@@ -315,25 +315,25 @@ openldap:
     existingSecret: openldap-admin
 ```
 
-The chart's auto-generated Secret is skipped entirely — the ExternalSecret
+The chart's auto-generated Secret is skipped entirely - the ExternalSecret
 owns the material.
 
 ## 6. Multi-master + autoscaling (HPA + time-of-day)
 
-Full-auto scale up/down of a multi-master mesh — CPU / memory driven,
+Full-auto scale up/down of a multi-master mesh - CPU / memory driven,
 with a business-hour ramp-up that raises the HPA ceiling every weekday.
 See [`scaling.md`](scaling.md) for the mechanism deep dive.
 
 ```yaml
 openldap:
   mode: multi-master
-  replicaCount: 2               # initial + hpa.minReplicas — keep aligned
+  replicaCount: 2               # initial + hpa.minReplicas - keep aligned
   replication:
     serverIdBase: 1
 
   # metrics-server MUST be running in the cluster for CPU/memory HPA.
   # For Prometheus-backed metrics (bind rate, latency), install
-  # prometheus-adapter and extend hpa.metrics[] — see scaling.md.
+  # prometheus-adapter and extend hpa.metrics[] - see scaling.md.
   hpa:
     enabled: true
     minReplicas: 2

@@ -1,6 +1,6 @@
 # openldap-platform
 
-Umbrella chart for the OpenLDAP platform — OpenLDAP server (HA-ready
+Umbrella chart for the OpenLDAP platform - OpenLDAP server (HA-ready
 StatefulSet + delta-syncrepl), phpLDAPadmin, and Self Service Password.
 Declarative GitOps-friendly administration via openldap-cli
 (https://github.com/maximewewer/openldap-cli).
@@ -23,7 +23,7 @@ kubectl -n ldap get secret ldap-openldap-admin \
 
 | Subchart | Default | Purpose |
 |----------|---------|---------|
-| `openldap` | enabled  | OpenLDAP 2.6 server — StatefulSet, cn=config bootstrap, HA (standalone / mirror / multi-master), delta-syncrepl, TLS backends, backup, monitoring |
+| `openldap` | enabled  | OpenLDAP 2.6 server - StatefulSet, cn=config bootstrap, HA (standalone / mirror / multi-master), delta-syncrepl, TLS backends, backup, monitoring |
 | `phpldapadmin` | disabled | Web UI for browsing / editing the directory |
 | `self-service-password` | disabled | End-user password change / reset UI (LTB) |
 

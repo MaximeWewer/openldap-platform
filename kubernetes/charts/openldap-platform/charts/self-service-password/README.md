@@ -1,12 +1,12 @@
 # self-service-password
 
-LDAP Tool Box Self Service Password — end-user password change / reset UI.
+LDAP Tool Box Self Service Password - end-user password change / reset UI.
 Config file (config.inc.local.php) rendered from values; binds against
 the sibling openldap subchart's Service by default.
 
 Normally installed via the umbrella [`openldap-platform`](../..) with
 `--set self-service-password.enabled=true`. Requires an LDAP bind
-account — declare it via `openldap.users` (uid: ssp) and point
+account - declare it via `openldap.users` (uid: ssp) and point
 `self-service-password.ldap.bind.existingSecret` at the auto-generated
 Secret `<release>-openldap-user-ssp`.
 

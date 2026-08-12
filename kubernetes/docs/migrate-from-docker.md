@@ -6,7 +6,7 @@ restore. The chart is a superset of the Docker setup, so every knob you
 tuned in `docker-compose.yml` / `init-config/slapd-config.ldif` has an
 equivalent value here.
 
-## 0. Baseline — what you have
+## 0. Baseline - what you have
 
 The Docker stack ships:
 - OpenLDAP 2.6 with the same overlay stack (memberof, refint, ppolicy,
@@ -27,7 +27,7 @@ openldap-cli backup config /tmp/config.ldif.gz
 ```
 
 For `standalone`, this is trivial. For `ha-active-active` /
-`ha-active-passive`, dump from any node — they all carry the full tree.
+`ha-active-passive`, dump from any node - they all carry the full tree.
 
 Copy the dumps to somewhere the K8s cluster can pull from (an object
 store, a git-crypt bundle, or `kubectl cp` later).
@@ -46,7 +46,7 @@ Map from Docker to the chart:
 | `init-config/slapd-config.ldif` `olcAccessLogPurge` | `openldap.accesslog.purge` |
 | `init-config/slapd-config.ldif` `olcPPolicyDefault` | `openldap.ppolicy.defaultPolicyRDN` |
 | `.env` (HA) `SERVER_ID` | `openldap.replication.serverIdBase` (per-pod ID computed from ordinal) |
-| `.env` (HA) `NODE_URIS` (internal) | Auto — chart wires in-cluster peers via headless Service DNS |
+| `.env` (HA) `NODE_URIS` (internal) | Auto - chart wires in-cluster peers via headless Service DNS |
 | `.env` (HA) `NODE_URIS` (cross-DC entries) | `openldap.replication.externalPeers` |
 | `.env` (HA) `REPLICATOR_DN` | `openldap.replication.replicator.dn` (default: `cn=replicator,ou=service-accounts`) |
 | `certs.sh` `--cn` + `--san` | `openldap.tls.job.commonName` + `openldap.tls.job.subjectAltNames` |
@@ -62,7 +62,7 @@ Map from Docker to the chart:
 ## 3. Install the chart (empty tree)
 
 Start with a values file that intentionally OMITS `openldap.users` /
-`openldap.groups` — the restore will bring them, no need for the sync
+`openldap.groups` - the restore will bring them, no need for the sync
 Jobs to fight the import:
 
 ```bash
@@ -107,13 +107,13 @@ On the next `helm upgrade`, the sync Jobs `user info alice` → user
 exists → run `user set` on the declared attributes (no destructive
 change). Same for groups + policies.
 
-**Watch out**: `onUserRemove: delete` (default) — any user present in
+**Watch out**: `onUserRemove: delete` (default) - any user present in
 LDAP but NOT declared in `openldap.users` gets deleted. Two safe paths:
 1. Declare every LDAP user in values.yaml BEFORE the first upgrade.
 2. Temporarily set `onUserRemove: lock` while you catch up.
 
 Also: chart-managed passwords are stored in per-user Secrets after the
-sync Job runs. For users imported from the dump, no Secret exists —
+sync Job runs. For users imported from the dump, no Secret exists -
 they keep the password from the dump. To rotate, delete the user's
 existing entry (or its userPassword) and let the sync Job re-create it
 with a fresh password Secret.

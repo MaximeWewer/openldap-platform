@@ -44,11 +44,11 @@ kubernetes/tests/cross-cluster/
 ```bash
 cd kubernetes/tests/cross-cluster/
 
-# 1. Boot both VMs — first run pulls the box + provisions minikube (~10 min).
+# 1. Boot both VMs - first run pulls the box + provisions minikube (~10 min).
 vagrant up
 
 # 2. Deploy: gen CA, push shared Secrets, helm install dc1 then dc2.
-#    Prints the ADMIN_PW at the end — save it for step 3.
+#    Prints the ADMIN_PW at the end - save it for step 3.
 ./install.sh
 # ...
 # === [3] deploy complete. Admin credentials:
@@ -66,40 +66,40 @@ export ADMIN_PW=…      # copy the value printed by install.sh
 vagrant destroy -f
 ```
 
-`install.sh` re-runs cleanly on top of an existing deploy — set every
+`install.sh` re-runs cleanly on top of an existing deploy - set every
 password env var (`ADMIN_PW`, `CFG_ADMIN_PW`, `REPLICATOR_PW`) before the
 second invocation to keep them stable, otherwise fresh randoms replace
 what's in cluster.
 
 ## What the rig proves
 
-- Boot order — dc1 seeds the base tree, dc2 joins empty and pulls the
+- Boot order - dc1 seeds the base tree, dc2 joins empty and pulls the
   full tree via syncrepl (`seedOnOrdinalZeroOnly: false`).
-- serverID disjoint — dc1 uses IDs 1-2, dc2 uses IDs 10-11; no
+- serverID disjoint - dc1 uses IDs 1-2, dc2 uses IDs 10-11; no
   olcServerID collision.
-- Shared CA — the same `ca.crt` on both sides validates the peer's leaf
+- Shared CA - the same `ca.crt` on both sides validates the peer's leaf
   cert on every syncrepl connection.
-- Bi-directional writes — additions on either cluster converge on the
+- Bi-directional writes - additions on either cluster converge on the
   other within `CONVERGE_WAIT` (default 15 s).
-- NodePort exposure — LDAPS is reached across the Vagrant private
+- NodePort exposure - LDAPS is reached across the Vagrant private
   network via `192.168.59.<other>:30636`, matching what a public LB
   would look like in prod.
 
 ## What the rig does NOT prove
 
-- **Network policy enforcement** — minikube's default CNI (`bridge`)
+- **Network policy enforcement** - minikube's default CNI (`bridge`)
   ignores `NetworkPolicy`. Both `dc1/values.yaml` and `dc2/values.yaml`
   set `networkPolicy.enabled: false` to reflect that. Test NP on a
   cluster with Calico / Cilium.
-- **Ingress controllers** — the rig uses raw NodePort. Test SNI
+- **Ingress controllers** - the rig uses raw NodePort. Test SNI
   passthrough / Gateway API on a cluster where those actually run.
-- **Backup / monitoring** — deliberately disabled in the test values
+- **Backup / monitoring** - deliberately disabled in the test values
   to keep the rig lean. Enable them separately if you want to
   co-validate.
 
 ## Troubleshooting
 
-**dc2 pod-0 stays in Init:CrashLoopBackOff** — usually a syncrepl
+**dc2 pod-0 stays in Init:CrashLoopBackOff** - usually a syncrepl
 handshake failure. Check the bootstrap log
 (`vagrant ssh dc2 -c "sudo kubectl -n ldap logs ldap-openldap-0 -c bootstrap"`)
 then the ongoing slapd log
@@ -109,11 +109,11 @@ Most common causes:
 - `192.168.59.20:30636` unreachable from dc2 → `vagrant ssh dc2 -c "nc -zv 192.168.59.20 30636"`
 - serverID collision → check both `values.yaml` set distinct `serverIdBase`.
 
-**`nc -zv` from dc2 hits `Connection refused`** — dc1's minikube didn't
+**`nc -zv` from dc2 hits `Connection refused`** - dc1's minikube didn't
 open the NodePort. `vagrant ssh dc1 -c "sudo kubectl -n ldap get svc ldap-openldap"`
 should list `636:30636/TCP`. If missing, `install.sh` didn't complete on
-dc1 — check its output.
+dc1 - check its output.
 
-**Everything works but writes on dc2 don't replicate back to dc1** —
+**Everything works but writes on dc2 don't replicate back to dc1** -
 `externalPeers` on dc1 doesn't include the dc2 endpoint. Verify by
 re-reading `dc1/values.yaml` and re-running `install.sh`.

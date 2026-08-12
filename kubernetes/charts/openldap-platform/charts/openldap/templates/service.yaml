@@ -1,5 +1,5 @@
 {{- /*
-Client-facing service — the DNS name applications should use. Round-robins
+Client-facing service - the DNS name applications should use. Round-robins
 across ready pods in HA modes; single backend in standalone.
 */ -}}
 apiVersion: v1

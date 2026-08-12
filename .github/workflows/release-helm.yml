@@ -51,7 +51,7 @@ jobs:
       - name: Fail early if the tag already exists
         run: |
           if git rev-parse "refs/tags/${{ steps.chart.outputs.tag }}" >/dev/null 2>&1; then
-            echo "::error::Tag ${{ steps.chart.outputs.tag }} already exists — bump Chart.yaml version before re-running."
+            echo "::error::Tag ${{ steps.chart.outputs.tag }} already exists - bump Chart.yaml version before re-running."
             exit 1
           fi
 

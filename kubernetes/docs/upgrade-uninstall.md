@@ -10,13 +10,13 @@ helm upgrade ldap kubernetes/charts/openldap-platform \
   -f my-values.yaml
 ```
 
-- Pod restarts are annotation-driven — the StatefulSet carries a
+- Pod restarts are annotation-driven - the StatefulSet carries a
   `checksum/bootstrap` + `checksum/admin-secret` annotation that changes
   whenever the corresponding ConfigMap / Secret changes.
 - The sync Jobs (ppolicy → users → groups) re-run on every upgrade as
   post-install/post-upgrade hooks, reconciling any values.yaml drift.
 - Admin passwords, replicator password and per-user passwords are
-  preserved across upgrades via Helm's `lookup` + fallback pattern —
+  preserved across upgrades via Helm's `lookup` + fallback pattern -
   RUNAsIs also caused by `helm.sh/resource-policy: keep` on those
   Secrets.
 
@@ -28,8 +28,8 @@ helm upgrade ldap kubernetes/charts/openldap-platform \
 | `podSecurityContext`, `securityContext`, `networkPolicy.*` | Rolling restart |
 | `bootstrap.sh` / `slapd-config.ldif` / `base-data.ldif` (ConfigMap change) | Rolling restart via checksum |
 | `admin.existingSecret` change | Rolling restart via checksum (chart-managed Secret) |
-| `users` / `groups` / `policies` change | No restart — sync Jobs pick it up |
-| `backup.*`, `accesslogPurgeJob.*` | New CronJob spec — next invocation uses it |
+| `users` / `groups` / `policies` change | No restart - sync Jobs pick it up |
+| `backup.*`, `accesslogPurgeJob.*` | New CronJob spec - next invocation uses it |
 | `monitoring.*` | Rolling restart (sidecar spec change) |
 | `tls.*` | Rolling restart |
 | `replication.externalPeers` | Rolling restart (bootstrap.sh regenerates syncrepl block) |
@@ -49,7 +49,7 @@ For `mode: multi-master` / `mode: mirror`:
 
 - `updateStrategy.type: RollingUpdate` (chart default) rolls one pod at
   a time, waiting for the new one to be Ready before touching the next.
-- Prefer `podManagementPolicy: OrderedReady` (chart default) — every
+- Prefer `podManagementPolicy: OrderedReady` (chart default) - every
   peer catches up via syncrepl before the next one goes.
 - PodDisruptionBudget `minAvailable: replicas - 1` (chart default)
   blocks concurrent voluntary evictions during node drains.
@@ -62,7 +62,7 @@ skip → slapd bind → syncrepl catch-up).
 
 Roll one cluster at a time; peers on the other clusters keep serving.
 Order matters ONLY when `replication.externalPeers` gains/loses an
-entry — the new list must land on every cluster's `helm upgrade` or the
+entry - the new list must land on every cluster's `helm upgrade` or the
 mesh becomes asymmetric.
 
 ## Rollback
@@ -81,8 +81,8 @@ Caveats:
 - **Data on PVCs is NOT touched by rollback.** If a bad upgrade
   populated bad LDIF via the sync Jobs (removed users, wrong ppolicy),
   rolling back the chart doesn't undo those LDAP writes. Restore from
-  backup instead — see [`backup-restore.md`](./backup-restore.md).
-- **CronJob history** — the old CronJob spec comes back but any Job
+  backup instead - see [`backup-restore.md`](./backup-restore.md).
+- **CronJob history** - the old CronJob spec comes back but any Job
   spawned by the newer spec keeps running to completion.
 
 ## Uninstall
@@ -149,7 +149,7 @@ self-service-password:
   enabled: false
 ```
 
-`helm upgrade` — Deployments and Services for the UIs get deleted;
+`helm upgrade` - Deployments and Services for the UIs get deleted;
 openldap keeps running. Auto-generated UI Secrets stay (harmless).
 
 ## Version compatibility

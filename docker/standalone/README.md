@@ -1,4 +1,4 @@
-# Standalone — OpenLDAP mono-instance
+# Standalone - OpenLDAP mono-instance
 
 Single-host deployment of OpenLDAP 2.6 + phpLDAPadmin + Self Service Password via Docker Compose.
 
@@ -31,7 +31,7 @@ bash setup.sh --reset
 | `setup.sh` | Bootstrap (`slapadd` cn=config + data, fix perms, `docker compose up`) |
 | `init-config/slapd-config.ldif` | Full `cn=config` (modules, schemas, ACLs, overlays, accesslog) |
 | `ssp.conf.php` | Self Service Password configuration |
-| `data/` | Persistent OpenLDAP data (`slapd.d`, MDB, accesslog) — gitignored |
+| `data/` | Persistent OpenLDAP data (`slapd.d`, MDB, accesslog) - gitignored |
 
 Shared with other modes (parent directory):
 
@@ -41,8 +41,8 @@ Shared with other modes (parent directory):
 | `certs.sh` + `certs/` | TLS cert generation/renewal (idempotent; see root README for cron) |
 | `backup/` | Backup dump location |
 
-For day-to-day administration (users, groups, ppolicy, diagnostics) use **[openldap-cli](https://github.com/maximewewer/openldap-cli)** — see root README → *Administration — openldap-cli*.
+For day-to-day administration (users, groups, ppolicy, diagnostics) use **[openldap-cli](https://github.com/maximewewer/openldap-cli)** - see root README → *Administration - openldap-cli*.
 
 ## Database sizing
 
-Default `olcDbMaxSize: 1 GiB` per DB (main `dc=…`, `cn=accesslog`, `cn=config`). Under bind audit (`olcAccessLogOps: writes bind`), the `cn=accesslog` DB can saturate within weeks — once full (`MDB_MAP_FULL`), writes cascade-fail and **binds appear as "Invalid credentials"** (ppolicy can't update its counters). Tune the accesslog overlay or live-resize `olcDbMaxSize` (no restart). See [root README — Database storage & sizing](../README.md#database-storage--sizing).
+Default `olcDbMaxSize: 1 GiB` per DB (main `dc=…`, `cn=accesslog`, `cn=config`). Under bind audit (`olcAccessLogOps: writes bind`), the `cn=accesslog` DB can saturate within weeks - once full (`MDB_MAP_FULL`), writes cascade-fail and **binds appear as "Invalid credentials"** (ppolicy can't update its counters). Tune the accesslog overlay or live-resize `olcDbMaxSize` (no restart). See [root README - Database storage & sizing](../README.md#database-storage--sizing).

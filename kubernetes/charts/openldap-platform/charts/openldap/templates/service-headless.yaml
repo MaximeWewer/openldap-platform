@@ -1,5 +1,5 @@
 {{- /*
-Headless service — required by the StatefulSet for stable per-pod DNS records
+Headless service - required by the StatefulSet for stable per-pod DNS records
 (<pod>.<headless>.<ns>.svc.cluster.local). Peer discovery for HA modes
 relies on these names.
 */ -}}

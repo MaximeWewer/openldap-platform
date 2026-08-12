@@ -2,7 +2,7 @@
 {{- $fullName := include "openldap.fullname" . -}}
 {{- $commonName := default $fullName .Values.tls.job.commonName -}}
 {{- /*
-Pre-install / pre-upgrade hook — runs BEFORE the StatefulSet is created so
+Pre-install / pre-upgrade hook - runs BEFORE the StatefulSet is created so
 slapd finds the TLS Secret when it first mounts /etc/openldap/certs. Uses
 its own SA/Role/RB (also as pre-install hooks) so it doesn't depend on the
 regular sync RBAC, which hasn't been applied yet during the hook phase.

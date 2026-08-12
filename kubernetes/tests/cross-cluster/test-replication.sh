@@ -49,9 +49,9 @@ uid: cc1
 userPassword: cc1pw"
 sleep "$CONVERGE_WAIT"
 if ldap_search_via dc2 "-b 'cn=cross-cluster-1,ou=users,dc=example,dc=org' dn" | grep -q "cn=cross-cluster-1"; then
-  echo "PASS — cross-cluster-1 replicated dc1 → dc2"
+  echo "PASS - cross-cluster-1 replicated dc1 → dc2"
 else
-  echo "FAIL — cross-cluster-1 not on dc2 after ${CONVERGE_WAIT}s"
+  echo "FAIL - cross-cluster-1 not on dc2 after ${CONVERGE_WAIT}s"
   exit 1
 fi
 
@@ -65,9 +65,9 @@ uid: cc2
 userPassword: cc2pw"
 sleep "$CONVERGE_WAIT"
 if ldap_search_via dc1 "-b 'cn=cross-cluster-2,ou=users,dc=example,dc=org' dn" | grep -q "cn=cross-cluster-2"; then
-  echo "PASS — cross-cluster-2 replicated dc2 → dc1"
+  echo "PASS - cross-cluster-2 replicated dc2 → dc1"
 else
-  echo "FAIL — cross-cluster-2 not on dc1 after ${CONVERGE_WAIT}s"
+  echo "FAIL - cross-cluster-2 not on dc1 after ${CONVERGE_WAIT}s"
   exit 1
 fi
 

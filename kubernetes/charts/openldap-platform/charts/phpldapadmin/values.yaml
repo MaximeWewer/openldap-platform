@@ -1,5 +1,5 @@
 # =============================================================================
-# phpldapadmin subchart — values
+# phpldapadmin subchart - values
 # =============================================================================
 
 image:
@@ -37,7 +37,7 @@ ldap:
 # doesn't exist and existingSecret is empty, a Secret is auto-generated with
 # a random 32-char password so the deployment doesn't leave a placeholder
 # credential behind. Whichever password lands there must ALSO exist in the
-# LDAP directory — the sibling openldap subchart can seed it via
+# LDAP directory - the sibling openldap subchart can seed it via
 # `openldap.users`:
 #
 #   openldap:
@@ -57,7 +57,7 @@ app:
   # Base URL exposed to the browser. Overwritten if ingress.host is set.
   url: "http://localhost:8080"
   timezone: "UTC"
-  # APP_KEY (Laravel) — chart-managed; auto-generated on first install and
+  # APP_KEY (Laravel) - chart-managed; auto-generated on first install and
   # preserved across upgrades via `lookup`. Set to reuse an existing Secret
   # carrying the key `app-key` (base64:<32-byte-key>).
   keyExistingSecret: ""
@@ -73,7 +73,7 @@ service:
 # =============================================================================
 # Ingress
 # =============================================================================
-# phpLDAPadmin IS HTTP — no ssl-passthrough gymnastics. The chart supports
+# phpLDAPadmin IS HTTP - no ssl-passthrough gymnastics. The chart supports
 # the same two modes as the openldap subchart: ingress-nginx (with an
 # optional TLS Secret) or Gateway API (HTTPRoute).
 ingress:
@@ -120,7 +120,7 @@ podSecurityContext:
   # live INSIDE /app and cannot be relocated to an emptyDir without losing
   # image content like storage/framework/views), then serves via Caddy on
   # 8080. Running non-root or with a read-only root FS breaks it. The
-  # trade-off is documented — if you need PSA restricted, rebuild the image
+  # trade-off is documented - if you need PSA restricted, rebuild the image
   # to run as an unprivileged user with mutable state under emptyDir mounts.
   seccompProfile:
     type: RuntimeDefault
@@ -145,7 +145,7 @@ affinity: {}
 topologySpreadConstraints: []
 
 # =============================================================================
-# Extension points — inject arbitrary volumes / mounts / containers / manifests
+# Extension points - inject arbitrary volumes / mounts / containers / manifests
 # without forking the chart.
 # =============================================================================
 extraEnv: []

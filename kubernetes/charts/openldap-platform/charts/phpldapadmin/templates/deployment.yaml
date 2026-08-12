@@ -63,7 +63,7 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            # Laravel APP_KEY — mandatory, base64-encoded 32-byte key.
+            # Laravel APP_KEY - mandatory, base64-encoded 32-byte key.
             - name: APP_KEY
               valueFrom:
                 secretKeyRef:
@@ -103,7 +103,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          # No chart-mandated volumeMounts — the image needs to write
+          # No chart-mandated volumeMounts - the image needs to write
           # in-place under /app (Laravel storage/cache) and /run + /tmp
           # (Caddy). Overlaying those with emptyDir hides the shipped default
           # content and breaks startup. readOnlyRootFilesystem=false in values

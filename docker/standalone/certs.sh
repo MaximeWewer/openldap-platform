@@ -4,12 +4,12 @@
 # Renewal policy:
 #   --force                       : regen LDAP cert unconditionally
 #   --renew-threshold-days N      : regen LDAP cert if expires within N days (default: 30)
-#   --regen-ca                    : regen the CA too (rare — invalidates server cert)
+#   --regen-ca                    : regen the CA too (rare - invalidates server cert)
 #
 # Container handling:
 #   --restart                     : if cert was renewed, restart the openldap container
 #   slapd reads TLS material at startup, so a restart is required to pick up new files.
-#   HAProxy in HA modes is TCP passthrough (no TLS termination) — no restart needed.
+#   HAProxy in HA modes is TCP passthrough (no TLS termination) - no restart needed.
 #
 # Output:
 #   --quiet                       : suppress non-action output (good for cron MAILTO)
@@ -39,7 +39,7 @@ Usage: $0 [options]
 Options:
   --force                        regen LDAP cert unconditionally
   --renew-threshold-days N       regen LDAP cert if expires within N days (default: $RENEW_THRESHOLD_DAYS)
-  --regen-ca                     regen the CA too (rare — invalidates server cert)
+  --regen-ca                     regen the CA too (rare - invalidates server cert)
   --restart                      restart the openldap container if a cert was renewed
   --quiet                        suppress non-action output (good for cron)
   --cn NAME                      Common Name for LDAP cert (default: $CN)
@@ -89,7 +89,7 @@ if [[ -n "$CA_FROM" ]]; then
     exit 1
   fi
   if [[ -f "$CA_CERT_PATH" ]] && cmp -s "$CA_FROM/openldapCA.crt" "$CA_CERT_PATH"; then
-    log "CA already in sync with $CA_FROM — no copy."
+    log "CA already in sync with $CA_FROM - no copy."
   else
     action "Importing CA from $CA_FROM ..."
     cp "$CA_FROM/openldapCA.crt" "$CA_CERT_PATH"
@@ -152,7 +152,7 @@ EOF
   RENEWED="yes"
 else
   EXPIRY=$(openssl x509 -in "$LDAP_CRT_PATH" -enddate -noout | cut -d= -f2)
-  log "LDAP certificate still valid (notAfter: $EXPIRY) — no action."
+  log "LDAP certificate still valid (notAfter: $EXPIRY) - no action."
 fi
 
 # === Permissions for the openldap container (uid 101, gid 102) ===
@@ -178,7 +178,7 @@ if [[ "$RENEWED" == "yes" ]]; then
       docker restart "$CONTAINER_NAME" >/dev/null
       action "Container '$CONTAINER_NAME' restarted."
     else
-      action "Container '$CONTAINER_NAME' not running — skip restart."
+      action "Container '$CONTAINER_NAME' not running - skip restart."
     fi
   else
     log "Note: slapd loads TLS at startup. Restart '$CONTAINER_NAME' to apply the new cert (or rerun with --restart)."

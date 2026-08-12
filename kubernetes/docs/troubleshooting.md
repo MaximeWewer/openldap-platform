@@ -5,7 +5,7 @@ diagnostic commands and fixes.
 
 ## Server pod
 
-### 1. `Init:CrashLoopBackOff` — bootstrap failing
+### 1. `Init:CrashLoopBackOff` - bootstrap failing
 
 Check the init container's log:
 
@@ -19,8 +19,8 @@ Common causes:
 
 | Log message | Cause | Fix |
 |-------------|-------|-----|
-| `Partial state detected (no success marker) — wiping and restarting` | Previous slapadd errored mid-run | Chart auto-recovers on next init pass. Watch a couple of restarts before intervening. |
-| `str2entry: entry -1 has multiple DNs` | LDIF merge lost a blank line between entries — user extraConfig error | Compare the rendered `bootstrap` ConfigMap to the source template. |
+| `Partial state detected (no success marker) - wiping and restarting` | Previous slapadd errored mid-run | Chart auto-recovers on next init pass. Watch a couple of restarts before intervening. |
+| `str2entry: entry -1 has multiple DNs` | LDIF merge lost a blank line between entries - user extraConfig error | Compare the rendered `bootstrap` ConfigMap to the source template. |
 | `Admin secrets missing under /secrets` | The `<release>-openldap-admin` Secret was deleted or references a wrong `existingSecret` | Re-create the Secret with keys `admin-password` + `config-admin-password` (base64) |
 | `apk add failed after 5 attempts` | Alpine mirror unreachable / DNS broken | Check DNS + egress on the node (test `alpine:3.24` pod running `apk update`). |
 | `Replicator secret missing under /replicator` | `mode != standalone` but replicator Secret absent | The chart creates it automatically unless `replication.replicator.existingSecret` is set. Verify it wasn't manually deleted. |
@@ -35,8 +35,8 @@ kubectl -n <ns> logs <pod> -c openldap
 |-----|-------|-----|
 | `daemon: bind(8) failed errno=2` | `ldapi:///` socket path missing (removed in this chart) | Should never happen with the shipped statefulset; check for a values override modifying the `-h` arg. |
 | `no serverID / URL match found` | `replication.replicateConfig.enabled=true` switches `olcServerID` to the URL form, and no listed URL matches a slapd listener | The chart pins `-h` to `ldap://<pod-fqdn>:<port> ldap://127.0.0.1:<port>` for exactly this reason. Check you haven't overridden `openldap.args` / `openldap.command`, and that `service.ldapPort` matches on both sides. With `replicateConfig` off the chart uses the single-int form and this cannot happen. |
-| Read-only replica silently stops receiving entries | An entry uses an objectClass added at runtime on the writable pool; the RO consumer lacks the schema, its `schemachecking=on` syncrepl rejects the entry and the whole stream stalls — with `-d 0` nothing is logged | Set `replication.replicateConfig.enabled=true`: RO pods then replicate the `cn=schema` subtree. To confirm a stall, compare entry counts: `ldapsearch -b <suffix> dn \| grep -c '^dn:'` on a writable pod vs the RO pod |
-| `<olcMultiProvider> database is not a shadow` | `olcMirrorMode`/`olcMultiProvider` on a database with no active `olcSyncrepl` | Every syncrepl provider was skipped. With URL-form `olcServerID`, slapd drops the provider matching its own identity URL — if that was the only one, none is left. Check `REPLICA_COUNT` reached the pod (bootstrap logs `built N syncrepl providers`). |
+| Read-only replica silently stops receiving entries | An entry uses an objectClass added at runtime on the writable pool; the RO consumer lacks the schema, its `schemachecking=on` syncrepl rejects the entry and the whole stream stalls - with `-d 0` nothing is logged | Set `replication.replicateConfig.enabled=true`: RO pods then replicate the `cn=schema` subtree. To confirm a stall, compare entry counts: `ldapsearch -b <suffix> dn \| grep -c '^dn:'` on a writable pod vs the RO pod |
+| `<olcMultiProvider> database is not a shadow` | `olcMirrorMode`/`olcMultiProvider` on a database with no active `olcSyncrepl` | Every syncrepl provider was skipped. With URL-form `olcServerID`, slapd drops the provider matching its own identity URL - if that was the only one, none is left. Check `REPLICA_COUNT` reached the pod (bootstrap logs `built N syncrepl providers`). |
 | slapd exits with no log | `readOnlyRootFilesystem: true` + a writable dir mount missing | Verify `/run/openldap` emptyDir mount is present. |
 | `MDB_MAP_FULL: Environment mapsize limit reached` | Main or accesslog DB hit `olcDbMaxSize` | Bump the value under `openldap.database.main.maxSizeBytes` / `openldap.database.accesslog.maxSizeBytes` and `helm upgrade`. See [`sizing.md`](./sizing.md). |
 
@@ -49,13 +49,13 @@ kubectl -n <ns> logs <pod> -c openldap
     -o jsonpath='{.data.admin-password}' | base64 -d ; echo
   ```
 
-- Try binding as the `configAdmin` DN (bypasses the main DB entirely) — if
+- Try binding as the `configAdmin` DN (bypasses the main DB entirely) - if
   that works, the failure is data-side (ACL / user missing). If the config
   bind also fails, the Secret pushed into cn=config diverged from the
-  Secret you're reading — usually the result of a partial bootstrap. Wipe
+  Secret you're reading - usually the result of a partial bootstrap. Wipe
   the PVC and reinstall.
 
-### 4. Bind returns `Server is unwilling to perform (53) — unauthenticated bind`
+### 4. Bind returns `Server is unwilling to perform (53) - unauthenticated bind`
 
 You passed an empty password (`-w ""`). Check env var interpolation in
 the script that built the ldapsearch command.
@@ -106,24 +106,24 @@ done
 
 Common causes:
 
-- **serverID collision** — two pods with the same ID freeze syncrepl.
-  Check `replication.serverIdBase` — must be distinct across clusters.
-- **Replicator bind failing** — check the replicator user exists on the
+- **serverID collision** - two pods with the same ID freeze syncrepl.
+  Check `replication.serverIdBase` - must be distinct across clusters.
+- **Replicator bind failing** - check the replicator user exists on the
   seed DC (`ldap-openldap-user-replicator` is auto-created if HA is on):
   ```bash
   kubectl exec ldap-openldap-0 -- ldapsearch -x -LLL \
     -D "cn=replicator,ou=service-accounts,dc=example,dc=org" \
     -w "$REPL_PW" -H ldap://localhost:389 -b "" -s base '(objectClass=*)'
   ```
-- **Peer network unreachable** — from a pod, `nc -zv <peer-fqdn> 636`.
+- **Peer network unreachable** - from a pod, `nc -zv <peer-fqdn> 636`.
   Cross-cluster: verify LDAPS ingress on the other cluster.
-- **Clock skew > sessionLog window** — check node time is NTP-synced.
+- **Clock skew > sessionLog window** - check node time is NTP-synced.
 
 ### 10. Cross-cluster peer refuses TLS
 
 `openssl s_client -connect <peer>:636 -showcerts` from a debug pod. If
 the peer's cert isn't signed by a CA in the local trust bundle, sync
-fails silently. Every peer must trust the SAME CA — the shared-CA path
+fails silently. Every peer must trust the SAME CA - the shared-CA path
 is documented in [`cross-cluster.md`](cross-cluster.md).
 
 ## TLS backend = job
@@ -156,7 +156,7 @@ default; if you enabled `runAsNonRoot`, remove it or pin `runAsUser: 0`.
 ### 14. `View path not found` in logs
 
 You mounted an emptyDir at `/app/storage` (or `/app/bootstrap/cache`).
-This hides shipped Laravel files. Don't mount there — accept
+This hides shipped Laravel files. Don't mount there - accept
 `readOnlyRootFilesystem: false` (chart default for this subchart).
 
 ## Self Service Password
@@ -167,7 +167,7 @@ Order-of-operations problem: SSP Deployment is a regular resource
 (applied by Helm immediately) but its bind Secret is created by the
 openldap post-install sync Job. Two fixes:
 
-- **Don't use `--wait`** on the initial install — Kubernetes retries the
+- **Don't use `--wait`** on the initial install - Kubernetes retries the
   Secret mount and the pod starts within ~30s of the sync Job completing.
 - **Pre-provision the Secret via external-secrets** before installing.
 
@@ -176,7 +176,7 @@ openldap post-install sync Job. Two fixes:
 Log in as an existing LDAP user, not the bind account. Verify:
 - `ldap.bind.dn` value is the actual FULL DN of an existing entry
 - `ldap.bind.existingSecret` points at a Secret with the key matching
-  `ldap.bind.secretKey` (defaults to `password` — matches openldap sync
+  `ldap.bind.secretKey` (defaults to `password` - matches openldap sync
   output; use `bindpw` if you copied from the phpldapadmin subchart pattern)
 
 ## Ingress
@@ -192,7 +192,7 @@ Log in as an existing LDAP user, not the bind account. Verify:
 ### 18. phpLDAPadmin redirect loops
 
 `APP_URL` doesn't match the browser URL. Chart auto-derives APP_URL from
-`ingress.host` — if you have a proxy in front, override `app.url`
+`ingress.host` - if you have a proxy in front, override `app.url`
 explicitly:
 
 ```yaml
@@ -216,9 +216,9 @@ rolled. `kubectl rollout restart statefulset/<release>-openldap`.
 
 ### 20. Scrape target `Down` in Prometheus
 
-- ServiceMonitor label mismatch — the `release: kube-prometheus-stack`
+- ServiceMonitor label mismatch - the `release: kube-prometheus-stack`
   label (or your prom-operator's serviceMonitorSelector) must match.
-- Namespace scoping — `serviceMonitorNamespaceSelector` on the Prometheus
+- Namespace scoping - `serviceMonitorNamespaceSelector` on the Prometheus
   CR must include the release namespace.
 
 ## NetworkPolicy
@@ -267,4 +267,4 @@ kubectl -n <ns> edit statefulset <release>-openldap
 # save; pod recycles; logs will be verbose.
 ```
 
-Revert to `-d 0` when done — the verbose modes are chatty.
+Revert to `-d 0` when done - the verbose modes are chatty.

@@ -1,5 +1,5 @@
 # =============================================================================
-# self-service-password subchart — values
+# self-service-password subchart - values
 # =============================================================================
 
 image:
@@ -52,7 +52,7 @@ general:
   allowedLanguages: ["en", "fr"]
 
 # =============================================================================
-# Password policy — mirrors self-service-password's config_ppolicy.
+# Password policy - mirrors self-service-password's config_ppolicy.
 # =============================================================================
 passwordPolicy:
   hash: "auto"                      # auto | SSHA | SHA | SMD5 | MD5 | CRYPT | clear
@@ -71,14 +71,14 @@ passwordPolicy:
   usePwnedPasswords: false
 
 # =============================================================================
-# Feature toggles (disabled by default — mail SMTP wiring in extraConfig)
+# Feature toggles (disabled by default - mail SMTP wiring in extraConfig)
 # =============================================================================
 useTokens: false
 useQuestions: false
 useSms: false
 
 # =============================================================================
-# Mail (optional — populate when useTokens=true and you want email links)
+# Mail (optional - populate when useTokens=true and you want email links)
 # =============================================================================
 mail:
   from: ""
@@ -93,7 +93,7 @@ mail:
   smtpPasswordKey: password
 
 # =============================================================================
-# Extra config — raw PHP lines appended to config.inc.local.php verbatim.
+# Extra config - raw PHP lines appended to config.inc.local.php verbatim.
 # Use this escape hatch for anything the values above don't expose.
 # =============================================================================
 extraConfig: ""
@@ -111,7 +111,7 @@ service:
   annotations: {}
 
 # =============================================================================
-# Ingress — HTTP UI, same shape as the phpldapadmin subchart.
+# Ingress - HTTP UI, same shape as the phpldapadmin subchart.
 # =============================================================================
 ingress:
   enabled: false
@@ -171,7 +171,7 @@ affinity: {}
 topologySpreadConstraints: []
 
 # =============================================================================
-# Extension points — inject arbitrary volumes / mounts / containers / manifests
+# Extension points - inject arbitrary volumes / mounts / containers / manifests
 # without forking the chart.
 # =============================================================================
 extraEnv: []

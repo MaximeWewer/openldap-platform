@@ -1,4 +1,4 @@
-# dc1 — seed cluster. serverIdBase=1 (IDs 1, 2, 3 for its 3 pods).
+# dc1 - seed cluster. serverIdBase=1 (IDs 1, 2, 3 for its 3 pods).
 # Loads the base directory tree on pod-0; dc2 pulls it via syncrepl.
 openldap:
   mode: multi-master

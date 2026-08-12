@@ -1,14 +1,14 @@
 {{- /*
-Read-only replica pool — syncrepl consumers of the writable StatefulSet.
+Read-only replica pool - syncrepl consumers of the writable StatefulSet.
 Reuses the same bootstrap ConfigMap and Secrets; the NODE_ROLE=readonly
 env var flips the bootstrap script into consumer-only mode
 (olcReadOnly: TRUE, distinct serverIdBase, no base-data seed, syncrepl
 providers = writable peers only).
 
-Requires openldap.mode != standalone — RO pool only makes sense when
+Requires openldap.mode != standalone - RO pool only makes sense when
 there is a write pool with delta-syncrepl to consume from.
 
-Keep in sync with statefulset.yaml — the pod spec is intentionally
+Keep in sync with statefulset.yaml - the pod spec is intentionally
 close so downstream users can `kubectl diff` the two easily.
 */ -}}
 {{- if gt (int .Values.readOnlyReplicas.count) 0 -}}
@@ -141,7 +141,7 @@ spec:
               value: {{ .Values.replication.replicateConfig.enabled | quote }}
             {{- if .Values.replication.replicateConfig.enabled }}
             # RO pods consume the cn=schema subtree ONLY (never the whole
-            # cn=config — they would inherit olcMirrorMode and stop being
+            # cn=config - they would inherit olcMirrorMode and stop being
             # read-only). Without it their syncrepl stalls on the first entry
             # using a runtime-added objectClass.
             - name: CONFIG_ADMIN_DN

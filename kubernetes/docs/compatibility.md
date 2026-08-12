@@ -1,7 +1,7 @@
 # Compatibility matrix
 
 Versions the chart is developed and validated against. Anything below
-the "Minimum" column has NOT been tested — file an issue if you find it
+the "Minimum" column has NOT been tested - file an issue if you find it
 works (or doesn't).
 
 ## Kubernetes
@@ -9,7 +9,7 @@ works (or doesn't).
 | Component | Minimum | Tested | Notes |
 |-----------|---------|--------|-------|
 | Kubernetes API | 1.27 | 1.29 | `kubeVersion` in Chart.yaml enforces the floor. Gateway API TLSRoute requires 1.25+, and the chart uses `apiVersion` `v1` (stable) / `v1alpha2` (TLSRoute). |
-| Helm CLI | 3.13 | 3.15, 4.2 | The chart uses `lookup`, `fromJsonArray`, `toJson` — Helm 3.13+ ships them. |
+| Helm CLI | 3.13 | 3.15, 4.2 | The chart uses `lookup`, `fromJsonArray`, `toJson` - Helm 3.13+ ships them. |
 | CoreDNS | any | 1.11 | Only needed for the in-cluster peer DNS names. |
 
 ## Container runtimes
@@ -17,7 +17,7 @@ works (or doesn't).
 | Runtime | Notes |
 |---------|-------|
 | containerd | Default target. |
-| CRI-O | Should work — no image-format specifics. |
+| CRI-O | Should work - no image-format specifics. |
 | docker-shim (retired < 1.24) | Untested; upgrade the cluster. |
 
 ## CNI (for NetworkPolicy enforcement)
@@ -34,14 +34,14 @@ works (or doesn't).
 
 ## Optional dependencies
 
-The chart auto-detects — nothing forces you to install them unless the
+The chart auto-detects - nothing forces you to install them unless the
 matching feature is enabled.
 
 | Dependency | Enabled by | Version tested |
 |------------|-----------|----------------|
 | **cert-manager** | `openldap.tls.backend: cert-manager` and/or subchart Ingress cert-manager | v1.14, v1.15 |
-| **prometheus-operator** (or kube-prometheus-stack) | `openldap.monitoring.serviceMonitor.enabled` / `openldap.monitoring.prometheusRule.enabled` | 0.72 (CRDs) — the chart uses the `monitoring.coreos.com/v1` API |
-| **ingress-nginx** | `ingress.mode: ingress-nginx` | 1.10 — controller MUST run with `--enable-ssl-passthrough` for LDAPS |
+| **prometheus-operator** (or kube-prometheus-stack) | `openldap.monitoring.serviceMonitor.enabled` / `openldap.monitoring.prometheusRule.enabled` | 0.72 (CRDs) - the chart uses the `monitoring.coreos.com/v1` API |
+| **ingress-nginx** | `ingress.mode: ingress-nginx` | 1.10 - controller MUST run with `--enable-ssl-passthrough` for LDAPS |
 | **Gateway API** | `ingress.mode: gateway-api` | v1 for HTTPRoute / Gateway, v1alpha2 for TLSRoute. Confirmed on Cilium 1.15 and Istio 1.22. |
 | **external-secrets** | `openldap.secrets.backend: external-secrets` + any `existingSecret` value | 0.9 (both `v1` and `v1beta1`) |
 
@@ -51,7 +51,7 @@ matching feature is enabled.
   slapd + back_mdb + overlays; no shell.
 - **Init**: `alpine:3.24` (~7 MB). Installs `openldap`,
   `openldap-back-mdb`, `openldap-overlay-all`, `openldap-clients` at
-  runtime — the OpenLDAP version pulled from Alpine is 2.6.6, which is
+  runtime - the OpenLDAP version pulled from Alpine is 2.6.6, which is
   wire-compatible with cleanstart 2.6.13 for slapadd bootstrap.
 
 Test upgrading to a newer 2.6.x tag by overriding `openldap.image.tag`.
@@ -66,8 +66,8 @@ Both hold across every 2.6 release.
 
 | Binary | Default version | Where |
 |--------|-----------------|-------|
-| `openldap-cli` | v2026.7.4 | `openldap.cli.version` — pinned per release for reproducibility. |
-| `kubectl` | v1.36.2 | `openldap.cli.kubectlVersion` — used by sync/backup/tls Jobs for Secret CRUD + STS rollout. |
+| `openldap-cli` | v2026.7.4 | `openldap.cli.version` - pinned per release for reproducibility. |
+| `kubectl` | v1.36.2 | `openldap.cli.kubectlVersion` - used by sync/backup/tls Jobs for Secret CRUD + STS rollout. |
 
 ## Prometheus exporter
 
@@ -80,7 +80,7 @@ Both hold across every 2.6 release.
 - `ReadWriteOnce` volumes on any CSI. StatefulSet uses one PVC per
   replica; no shared-storage requirement.
 - Expansion: bumping `persistence.size` requires a StorageClass with
-  `allowVolumeExpansion: true` **and** `kubectl edit pvc` on each PVC —
+  `allowVolumeExpansion: true` **and** `kubectl edit pvc` on each PVC -
   StatefulSet won't recreate them.
 
 ## Local development / test clusters
@@ -96,5 +96,5 @@ Tested:
 - Rancher / RKE-specific storage.
 - ARM64 nodes (both cleanstart and alpine images support arm64, but
   none of the CI runs exercised it).
-- OpenLDAP 2.5 / 2.4 — the chart depends on delta-syncrepl behaviour
+- OpenLDAP 2.5 / 2.4 - the chart depends on delta-syncrepl behaviour
   that stabilised in 2.6.

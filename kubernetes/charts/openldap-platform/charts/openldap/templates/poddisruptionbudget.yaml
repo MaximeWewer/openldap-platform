@@ -4,7 +4,7 @@ knob. `enabled: auto` (default) resolves to `enabled: true` when the mode
 requires more than one replica, so voluntary evictions (node drains) always
 keep a quorum online.
 
-Standalone with replicaCount=1 can't have a meaningful PDB — Kubernetes
+Standalone with replicaCount=1 can't have a meaningful PDB - Kubernetes
 would allow no eviction ever, which blocks node drains entirely. We simply
 skip the PDB in that case.
 */ -}}

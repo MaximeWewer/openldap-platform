@@ -17,7 +17,7 @@ CA_DAYS="${CA_DAYS:-3650}"
 CERT_DAYS="${CERT_DAYS:-365}"
 
 if [ -f ca.crt ] && [ -f ca.key ]; then
-  echo "=== CA already present — skipping (rm ca.{crt,key} to regenerate) ==="
+  echo "=== CA already present - skipping (rm ca.{crt,key} to regenerate) ==="
 else
   echo "=== generating CA (${CA_DAYS}d) ==="
   openssl genrsa -out ca.key 4096

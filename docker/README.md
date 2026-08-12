@@ -18,7 +18,7 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
   - [Prerequisites](#prerequisites)
   - [Quick start](#quick-start)
   - [Default credentials](#default-credentials)
-- [Administration — openldap-cli](#administration--openldap-cli)
+- [Administration - openldap-cli](#administration--openldap-cli)
   - [Configure](#configure)
   - [Two-bind architecture](#two-bind-architecture)
   - [Day-1 sequence](#day-1-sequence)
@@ -28,7 +28,7 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
   - [Enable TLS](#enable-tls)
   - [Certificate renewal](#certificate-renewal)
   - [HA: shared CA across nodes](#ha-shared-ca-across-nodes)
-  - [Cron — automatic renewal](#cron--automatic-renewal)
+  - [Cron - automatic renewal](#cron--automatic-renewal)
 - [Database storage & sizing](#database-storage--sizing)
   - [The 3 databases](#the-3-databases)
   - [Tuning the accesslog overlay](#tuning-the-accesslog-overlay)
@@ -52,7 +52,7 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
 
 ### Key features
 
-- **Minimal image**: Uses `cleanstart/openldap` — no shell, no bootstrap scripts, full control via `slapadd`
+- **Minimal image**: Uses `cleanstart/openldap` - no shell, no bootstrap scripts, full control via `slapadd`
 - **Secure by default**: Least-privilege ACLs per OU, SSHA-hashed rootDN passwords, ECDSA P-384 TLS certificates, isolated Docker network
 - **Pre-configured overlays**: memberof, referential integrity, password policy, dynamic lists, accesslog (HA), syncprov (HA)
 - **Three deployment modes**: standalone, HA active-passive (MirrorMode), HA active-active (N-way Multi-Master)
@@ -106,7 +106,7 @@ Pick the layout that matches your availability needs. Each mode is **self-contai
 Both HA modes replicate `dc=example,dc=org` only by default. Set
 `REPLICATE_CONFIG=true` in the node `.env` to replicate `cn=config` as well, so
 ACLs / overlays / schema / ppolicy changes propagate instead of staying on the
-node that received them — details in the per-mode READMEs.
+node that received them - details in the per-mode READMEs.
 
 Per-mode READMEs go into the specific operational details:
 
@@ -122,8 +122,8 @@ Per-mode READMEs go into the specific operational details:
 
 - Docker & Docker Compose
 - `ldap-utils` (only needed for raw `ldapsearch` debug; the CLI covers everything else)
-- [openldap-cli](https://github.com/maximewewer/openldap-cli) — companion admin tool
-- VirtualBox + Vagrant — HA modes only (for the local test cluster)
+- [openldap-cli](https://github.com/maximewewer/openldap-cli) - companion admin tool
+- VirtualBox + Vagrant - HA modes only (for the local test cluster)
 
 ### Quick start
 
@@ -131,10 +131,10 @@ Per-mode READMEs go into the specific operational details:
 # Standalone (single host)
 cd standalone && bash setup.sh
 
-# HA Active-Passive — boot the 3-VM Vagrant cluster
+# HA Active-Passive - boot the 3-VM Vagrant cluster
 cd ha-active-passive/tests && vagrant up
 
-# HA Active-Active — boot the 3-VM Vagrant cluster
+# HA Active-Active - boot the 3-VM Vagrant cluster
 cd ha-active-active/tests && vagrant up
 ```
 
@@ -153,17 +153,17 @@ Each HA mode boots a 3-VM VirtualBox cluster on `192.168.58.10-12` running Docke
 
 ---
 
-## Administration — openldap-cli
+## Administration - openldap-cli
 
 Day-to-day directory administration (users, groups, service accounts, ppolicy, ACLs, diagnostics, backup) is handled by the companion CLI:
 
-> **[github.com/maximewewer/openldap-cli](https://github.com/maximewewer/openldap-cli)** — a single static Go binary (no runtime, no dependencies).
+> **[github.com/maximewewer/openldap-cli](https://github.com/maximewewer/openldap-cli)** - a single static Go binary (no runtime, no dependencies).
 
 This repo (`openldap-platform`) is now only responsible for **bootstrapping and operating the slapd container(s)** (compose, slapadd, TLS certs, HA replication wiring, physical backups).
 
 ### Configure
 
-The CLI reads `~/.openldap-cli.yaml` (override with `--config PATH`). It supports multiple **profiles** — handy when switching between dev (standalone), HA staging, and prod nodes:
+The CLI reads `~/.openldap-cli.yaml` (override with `--config PATH`). It supports multiple **profiles** - handy when switching between dev (standalone), HA staging, and prod nodes:
 
 ```yaml
 default: prod
@@ -197,11 +197,11 @@ openldap-cli --profile prod user info admin-foo   # one-off override
 
 ### Two-bind architecture
 
-- **data bind** (`bind_dn`) — used for ACL-checked ops on `dc=…` (create/modify users, groups, etc.)
-- **config bind** (`config_bind_dn`) — required for cn=config / ACL / overlay / monitor operations
+- **data bind** (`bind_dn`) - used for ACL-checked ops on `dc=…` (create/modify users, groups, etc.)
+- **config bind** (`config_bind_dn`) - required for cn=config / ACL / overlay / monitor operations
 
 > Full command list, flags, and JSON/YAML output modes:
-> **[github.com/maximewewer/openldap-cli](https://github.com/maximewewer/openldap-cli)** — `openldap-cli <cmd> --help` from the binary itself.
+> **[github.com/maximewewer/openldap-cli](https://github.com/maximewewer/openldap-cli)** - `openldap-cli <cmd> --help` from the binary itself.
 
 ### Day-1 sequence
 
@@ -219,7 +219,7 @@ openldap-cli ops db-stats                         # sanity check
 
 ### LDAP commands cheat-sheet
 
-`search` accepts an arbitrary `--base` — any subtree (including `cn=config`) is reachable without dropping to raw `ldapsearch`.
+`search` accepts an arbitrary `--base` - any subtree (including `cn=config`) is reachable without dropping to raw `ldapsearch`.
 
 ```bash
 # List all entries under the base DN
@@ -243,12 +243,12 @@ LDAP_BIND_DN='cn=gitea,ou=service-accounts,dc=example,dc=org' LDAP_BIND_PW='PASS
 ## Password rotation
 
 ```bash
-# User / service-account password — via the CLI
+# User / service-account password - via the CLI
 openldap-cli user passwd admin
 openldap-cli svc passwd gitea
 
 # RootDN passwords (cn=adminconfig,cn=config OR cn=admin,dc=example,dc=org)
-# These live in slapd-config.ldif as {SSHA} hashes — rotate via config set:
+# These live in slapd-config.ldif as {SSHA} hashes - rotate via config set:
 HASH=$(docker run --rm --entrypoint slappasswd cleanstart/openldap:2.6.13 -s "NEW_PASSWORD")
 openldap-cli config set 'olcDatabase={0}config,cn=config' olcRootPW "$HASH"
 ```
@@ -258,7 +258,7 @@ openldap-cli config set 'olcDatabase={0}config,cn=config' olcRootPW "$HASH"
 > In the HA modes the `cn=config` rootDN password is rendered from
 > `CONFIG_ADMIN_PASSWORD` in the node `.env` (default `adminpasswordconfig`).
 > Rotate it there too, otherwise the next `setup-node.sh --reset` puts the old
-> one back — and with `REPLICATE_CONFIG=true` it is also the bind credential of
+> one back - and with `REPLICATE_CONFIG=true` it is also the bind credential of
 > the `cn=config` syncrepl, so it must stay identical on every node.
 
 ---
@@ -293,7 +293,7 @@ openldap-cli config set 'olcDatabase={0}config,cn=config' olcRootPW "$HASH"
    entrypoint: ["slapd", "-u", "ldap", "-g", "ldap", "-h", "ldap:// ldaps://", "-d", "64"]
    ```
 
-4. **phpLDAPadmin over LDAPS** (standalone only — HA phpLDAPadmin points at HAProxy):
+4. **phpLDAPadmin over LDAPS** (standalone only - HA phpLDAPadmin points at HAProxy):
 
    ```yaml
    - LDAP_CONNECTION=ldaps
@@ -326,7 +326,7 @@ openldap-cli config set 'olcDatabase={0}config,cn=config' olcRootPW "$HASH"
 
 - Generates the CA only when missing (or with `--regen-ca`)
 - Renews the LDAP server cert only when missing, expired, or expiring within `--renew-threshold-days N` (default **30 days**)
-- With `--restart`, restarts the `openldap` container when a cert is actually renewed (slapd reads TLS material at startup — no hot reload)
+- With `--restart`, restarts the `openldap` container when a cert is actually renewed (slapd reads TLS material at startup - no hot reload)
 - HAProxy is **not** restarted: it does TCP passthrough, so cert renewal is transparent to it
 - `--quiet` suppresses output when nothing happens (cron-friendly)
 
@@ -345,8 +345,8 @@ bash certs.sh --help
 
 **Each peer must trust the same CA**, otherwise HAProxy failover causes a TLS mismatch (client sees a different CA after switching nodes). Workflow:
 
-1. **CA master (node 1)** — generates the CA + its own server cert (SAN = node 1 hostname/IP).
-2. **Each peer (node 2, 3, …)** — receives the CA's cert+key (scp or the Vagrant helper), then `certs.sh --ca-from PATH --san "..."` produces a per-node server cert signed by the shared CA.
+1. **CA master (node 1)** - generates the CA + its own server cert (SAN = node 1 hostname/IP).
+2. **Each peer (node 2, 3, …)** - receives the CA's cert+key (scp or the Vagrant helper), then `certs.sh --ca-from PATH --san "..."` produces a per-node server cert signed by the shared CA.
 
 Manual (production-ish):
 
@@ -372,9 +372,9 @@ bash distribute-ca.sh        # bootstraps CA on ldap1, distributes to ldap2+ldap
                              # runs certs.sh per-node with the correct SAN, verifies chain
 ```
 
-### Cron — automatic renewal
+### Cron - automatic renewal
 
-Replace `<mode>` with your deployment directory. On HA, install the cron on **every node** — the script reuses the existing CA and only renews the per-node server cert.
+Replace `<mode>` with your deployment directory. On HA, install the cron on **every node** - the script reuses the existing CA and only renews the per-node server cert.
 
 ```cron
 # Weekly check at 04:00 every Monday: renew if expiring within 30d, restart openldap if renewed.
@@ -383,7 +383,7 @@ Replace `<mode>` with your deployment directory. On HA, install the cron on **ev
 ```
 
 - `--quiet` keeps the log empty when no action is taken; only renewals/errors are recorded.
-- Run the cron as **root** (or with passwordless sudo) — the script needs to `chown 101:102 certs/` so the openldap container can read the cert.
+- Run the cron as **root** (or with passwordless sudo) - the script needs to `chown 101:102 certs/` so the openldap container can read the cert.
 - Verify next expiry: `openssl x509 -in <mode>/certs/openldap.crt -enddate -noout`.
 - **CA expiry** (3 years by default): plan a manual `--regen-ca` rotation campaign + re-distribution before that date.
 
@@ -391,7 +391,7 @@ Replace `<mode>` with your deployment directory. On HA, install the cron on **ev
 
 ## Database storage & sizing
 
-This deployment uses **LMDB (back_mdb)** for every OpenLDAP database. LMDB pre-allocates its data file (`data.mdb`) to a fixed virtual size called the **mapsize** (`olcDbMaxSize`). The file is sparse — it only consumes real disk as data is written — but **no transaction can extend the file past the mapsize**: once reached you get `MDB_MAP_FULL` and every write fails until you raise the limit.
+This deployment uses **LMDB (back_mdb)** for every OpenLDAP database. LMDB pre-allocates its data file (`data.mdb`) to a fixed virtual size called the **mapsize** (`olcDbMaxSize`). The file is sparse - it only consumes real disk as data is written - but **no transaction can extend the file past the mapsize**: once reached you get `MDB_MAP_FULL` and every write fails until you raise the limit.
 
 ### The 3 databases
 
@@ -399,7 +399,7 @@ This deployment uses **LMDB (back_mdb)** for every OpenLDAP database. LMDB pre-a
 | ----------- | ------------------- | ---------------------------------------- | ---------------------- | ------------------------------------ |
 | `{0}config` | `cn=config`         | runtime config (modules, ACLs, overlays) | (small, hard-coded)    | none                                 |
 | `{1}mdb`    | `dc=example,dc=org` | actual directory data                    | **1 GiB**              | slow (users, groups)                 |
-| `{2}mdb`    | `cn=accesslog`      | overlay-written audit log                | **1 GiB**              | **fast** — every logged op = a write |
+| `{2}mdb`    | `cn=accesslog`      | overlay-written audit log                | **1 GiB**              | **fast** - every logged op = a write |
 
 The accesslog DB is the one that **blows up** in practice. See below.
 
@@ -409,8 +409,8 @@ The `accesslog` overlay logs operations into `cn=accesslog`. Its growth rate is 
 
 | Attribute             | Recommended value   | Effect                                                                                                                |
 | --------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `olcAccessLogOps`     | `writes`            | Audit only mutations (add/modify/delete). Add `bind` only if you need full auth audit — expect ~10× the volume.       |
-| `olcAccessLogSuccess` | `TRUE`              | Log only successful operations. `FALSE` logs failures too — every retry, every bad-password bot floods the DB.        |
+| `olcAccessLogOps`     | `writes`            | Audit only mutations (add/modify/delete). Add `bind` only if you need full auth audit - expect ~10× the volume.       |
+| `olcAccessLogSuccess` | `TRUE`              | Log only successful operations. `FALSE` logs failures too - every retry, every bad-password bot floods the DB.        |
 | `olcAccessLogPurge`   | `03+00:00 00+06:00` | Keep 3 days, purge every 6 hours. Default `07+00:00 01+00:00` (7d / 24h) lets the DB grow ~28× larger between purges. |
 
 Example tuning (sane defaults for most deployments):
@@ -445,7 +445,7 @@ openldap-cli ops monitor
 # Mapsize (the hard limit) per DB
 openldap-cli config db list
 
-# Optional: physical file size on disk (sparse — can be much smaller than mapsize)
+# Optional: physical file size on disk (sparse - can be much smaller than mapsize)
 du -h <mode>/data/openldap-data/data.mdb
 du -h <mode>/data/accesslog-data/data.mdb
 ```
@@ -454,7 +454,7 @@ Set up an alert when page usage from `ops db-stats` exceeds ~70%.
 
 ### Resizing `olcDbMaxSize` at runtime
 
-`olcDbMaxSize` is **live-resizable** — slapd calls `mdb_env_set_mapsize()` and the new limit applies to the next transaction. No restart needed (and no `--reset`). Pick a value you can grow into for the next year.
+`olcDbMaxSize` is **live-resizable** - slapd calls `mdb_env_set_mapsize()` and the new limit applies to the next transaction. No restart needed (and no `--reset`). Pick a value you can grow into for the next year.
 
 The CLI ships a dedicated command that accepts human-readable sizes (`4GiB`, `512MiB`, or raw bytes):
 
@@ -463,7 +463,7 @@ The CLI ships a dedicated command that accepts human-readable sizes (`4GiB`, `51
 openldap-cli config db resize 'olcDatabase={2}mdb,cn=config' 4GiB
 ```
 
-> **Note**: the resize remaps the LMDB env, which can briefly disrupt slapd under heavy load — quiet hours preferred.
+> **Note**: the resize remaps the LMDB env, which can briefly disrupt slapd under heavy load - quiet hours preferred.
 >
 > **Cannot reduce live**: shrinking the mapsize requires `slapcat` → wipe `data.mdb` → `slapadd` offline.
 
@@ -496,21 +496,21 @@ mdb_id2entry_put: mdb_put failed: MDB_MAP_FULL: Environment mapsize limit reache
 mdb_add: txn_commit failed : MDB_MAP_FULL: Environment mapsize limit reached (-30792)
 ```
 
-If `accesslog` is the saturated DB, **every write on the main DB also fails** (the accesslog overlay write is part of the same transaction). That cascades into surprising symptoms — the most common one being **all binds appearing to fail with "Invalid credentials"** because the `ppolicy` overlay can't write its `pwdFailureTime`/`pwdAccountLockedTime` counters.
+If `accesslog` is the saturated DB, **every write on the main DB also fails** (the accesslog overlay write is part of the same transaction). That cascades into surprising symptoms - the most common one being **all binds appearing to fail with "Invalid credentials"** because the `ppolicy` overlay can't write its `pwdFailureTime`/`pwdAccountLockedTime` counters.
 
 ### HA notes
 
-Each node has its **own** accesslog DB (it's not replicated — it's a per-server transcript fed into delta-syncrepl). Tuning + monitoring must be applied **on every node**. Volume is approximately equal on all peers in steady state because each node logs both its own client writes and the writes it pulls in via syncrepl.
+Each node has its **own** accesslog DB (it's not replicated - it's a per-server transcript fed into delta-syncrepl). Tuning + monitoring must be applied **on every node**. Volume is approximately equal on all peers in steady state because each node logs both its own client writes and the writes it pulls in via syncrepl.
 
 ---
 
 ## Backup & restore
 
-> Store backup files on an encrypted partition — they contain password hashes.
+> Store backup files on an encrypted partition - they contain password hashes.
 
 Two complementary approaches:
 
-|                                    | LDIF (logical) — recommended             | tar (physical snapshot) — fallback       |
+|                                    | LDIF (logical) - recommended             | tar (physical snapshot) - fallback       |
 | ---------------------------------- | ---------------------------------------- | ---------------------------------------- |
 | Tool                               | `openldap-cli backup` (online, via LDAP) | `tar` in alpine (offline, files on disk) |
 | Portable across slapd versions     | yes                                      | no (MDB format tied to version)          |
@@ -544,7 +544,7 @@ Useful when you want to clone a server byte-for-byte (e.g., move between hosts) 
 ```bash
 cd <mode>
 
-# Config / data / accesslog snapshots (slapd can be running — MDB is crash-safe,
+# Config / data / accesslog snapshots (slapd can be running - MDB is crash-safe,
 # but a stopped slapd gives a guaranteed-consistent snapshot)
 docker run --rm -v ./data/slapd.d:/slapd.d:ro -v ./backup:/backup alpine:latest \
   sh -c "tar czf /backup/config_$(date +%Y%m%d).tar.gz -C /slapd.d ."
@@ -568,7 +568,7 @@ docker compose up -d
 ### Cronjob
 
 ```bash
-# LDIF backup via CLI — recommended (no docker, no root, no slapd restart)
+# LDIF backup via CLI - recommended (no docker, no root, no slapd restart)
 # Positional file path; .ldif.gz auto-gzips the dump.
 0 22 * * * /usr/bin/openldap-cli backup data /path/to/openldap-platform/<mode>/backup/data_$(date +\%Y\%m\%d).ldif.gz 2>>/var/log/openldap-backup.log
 0 22 * * * /usr/bin/openldap-cli backup config /path/to/openldap-platform/<mode>/backup/config_$(date +\%Y\%m\%d).ldif.gz 2>>/var/log/openldap-backup.log
@@ -610,7 +610,7 @@ To enable POSIX support, uncomment these lines in your mode's slapd-config (`sta
 #olcAccess: {1}to attrs=shadowLastChange by self write by * read
 ```
 
-Once the schema is enabled, create POSIX users via the CLI — see `openldap-cli user add --help` for the available flags.
+Once the schema is enabled, create POSIX users via the CLI - see `openldap-cli user add --help` for the available flags.
 
 ---
 

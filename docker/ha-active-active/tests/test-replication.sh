@@ -113,7 +113,7 @@ EOF
     fi
     ldapdelete -x -H "${PEERS[$LAST_IDX]}" -D "$ADMIN_DN" -w "$ADMIN_PW" "$REV_DN" 2>/dev/null || true
   else
-    echo "  Write rejected on ${PEERS[$LAST_IDX]} (read-only consumer — expected in mirror mode)"
+    echo "  Write rejected on ${PEERS[$LAST_IDX]} (read-only consumer - expected in mirror mode)"
   fi
 fi
 

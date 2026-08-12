@@ -12,7 +12,7 @@
 #   vagrant destroy -f         # tear down
 #
 # The Vagrantfile only boots the VMs + installs the tooling. install.sh
-# drives the actual Helm rollout — that way you can re-run install.sh
+# drives the actual Helm rollout - that way you can re-run install.sh
 # iteratively without recreating the VMs.
 
 BOX           = ENV.fetch("VAGRANT_BOX", "cloud-image/ubuntu-26.04")
@@ -36,7 +36,7 @@ Vagrant.configure("2") do |config|
     config.vbguest.no_install  = true
   end
 
-  # Only sync the chart tree — VMs don't need the docker/ subdirectory.
+  # Only sync the chart tree - VMs don't need the docker/ subdirectory.
   config.vm.synced_folder "../../..", "/vagrant", type: "rsync",
     rsync__exclude: [".git/", ".vagrant/",
                      "docker/",

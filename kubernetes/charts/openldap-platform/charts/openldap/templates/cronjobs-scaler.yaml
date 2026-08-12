@@ -41,7 +41,7 @@ spec:
             - name: patch
               image: "rancher/kubectl:{{ $.Values.cli.kubectlVersion }}"
               imagePullPolicy: IfNotPresent
-              # rancher/kubectl is distroless — no shell, invoke kubectl directly.
+              # rancher/kubectl is distroless - no shell, invoke kubectl directly.
               command: [kubectl]
               args:
                 - -n

@@ -1,10 +1,10 @@
 {{- /*
-StatefulSet — one PVC per replica (data/), three mount points via subPath:
+StatefulSet - one PVC per replica (data/), three mount points via subPath:
   slapd.d/         -> /etc/openldap/slapd.d
   openldap-data/   -> /var/lib/openldap/openldap-data
   accesslog-data/  -> /var/lib/openldap/accesslog-data
 
-The bootstrap initContainer runs slapadd only when cn=config is absent — safe
+The bootstrap initContainer runs slapadd only when cn=config is absent - safe
 to re-run on pod restart or upgrade. It reads admin/config-admin passwords
 from the mounted Secret (never persisted in cleartext) and hashes them with
 slappasswd before writing them into cn=config.
@@ -13,7 +13,7 @@ slappasswd before writing them into cn=config.
 {{- $mode := .Values.mode -}}
 {{- $replicas := int .Values.replicaCount -}}
 {{- if not (has $mode (list "standalone" "mirror" "multi-master")) -}}
-{{- fail (printf "openldap.mode=%q is invalid — expected standalone | mirror | multi-master" $mode) -}}
+{{- fail (printf "openldap.mode=%q is invalid - expected standalone | mirror | multi-master" $mode) -}}
 {{- end -}}
 {{- if and (eq $mode "standalone") (ne $replicas 1) -}}
 {{- fail (printf "openldap.replicaCount must be 1 for mode=standalone (got %d)" $replicas) -}}
@@ -27,7 +27,7 @@ slappasswd before writing them into cn=config.
 {{- $ha := ne $mode "standalone" -}}
 {{- $replConfig := and $ha .Values.replication.replicateConfig.enabled -}}
 {{- if and .Values.replication.replicateConfig.enabled (not $ha) -}}
-{{- fail "openldap.replication.replicateConfig.enabled requires mode != standalone — a single node has no peer to replicate cn=config with" -}}
+{{- fail "openldap.replication.replicateConfig.enabled requires mode != standalone - a single node has no peer to replicate cn=config with" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: StatefulSet
@@ -60,7 +60,7 @@ spec:
         checksum/admin-secret: {{ include (print $.Template.BasePath "/secret-admin.yaml") . | sha256sum }}
         {{- end }}
         {{- if $ha }}
-        # Force pod rollout when peer topology changes — replicaCount,
+        # Force pod rollout when peer topology changes - replicaCount,
         # serverIdBase, externalPeers. Each pod's initContainer detects the
         # mismatched .topology-hash on the PVC and rebuilds cn=config with
         # the new peer list (data DB preserved). Enables full-auto scale
@@ -233,11 +233,11 @@ spec:
             {{- /*
               cn=config replication uses the URL form of olcServerID, and slapd
               only accepts it if one of the listed URLs matches one of its own
-              listeners — `ldap:///` (0.0.0.0) never does. Each pod therefore
+              listeners - `ldap:///` (0.0.0.0) never does. Each pod therefore
               binds its own FQDN (present in /etc/hosts, no DNS dependency)
               plus 127.0.0.1 for the metrics sidecar and local tooling.
               0.0.0.0 is deliberately NOT bound: it would collide with both.
-              $(VAR) is expanded by the kubelet — the image has no shell.
+              $(VAR) is expanded by the kubelet - the image has no shell.
             */}}
             - "ldap://$(POD_NAME).$(HEADLESS_SVC).$(POD_NAMESPACE).svc.cluster.local:{{ .Values.service.ldapPort }} ldap://127.0.0.1:{{ .Values.service.ldapPort }}{{ if .Values.tls.enabled }} ldaps://$(POD_NAME).$(HEADLESS_SVC).$(POD_NAMESPACE).svc.cluster.local:{{ .Values.service.ldapsPort }} ldaps://127.0.0.1:{{ .Values.service.ldapsPort }}{{ end }}"
             {{- else }}
@@ -348,7 +348,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           securityContext:
-            # Image's USER is "nonroot" (name, not numeric UID) — Kubernetes
+            # Image's USER is "nonroot" (name, not numeric UID) - Kubernetes
             # cannot verify against runAsNonRoot, so pin the UID explicitly
             # (distroless nonroot = 65532).
             runAsUser: 65532

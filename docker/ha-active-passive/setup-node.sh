@@ -90,7 +90,7 @@ fi
 # === serverID only on masters ===
 # URL form when cn=config replicates: the whole config DB is copied, root entry
 # included, so a single-int olcServerID would be overwritten by the peer. The
-# URLs are the REAL peer addresses from NODE_URIS — that match is also what
+# URLs are the REAL peer addresses from NODE_URIS - that match is also what
 # makes slapd drop the syncrepl entry pointing at itself, avoiding the
 # `(53) Server is unwilling to perform` storm that stalls the real consumers.
 # Binding a docker-host address requires host networking, switched on by the

@@ -1,5 +1,5 @@
 # =============================================================================
-# openldap-platform — umbrella values
+# openldap-platform - umbrella values
 # =============================================================================
 # Every subchart's `values.yaml` is mirrored under its top-level key
 # (openldap / phpldapadmin / self-service-password). The chart pipeline
@@ -12,19 +12,19 @@
 
 
 # =============================================================================
-# openldap — OpenLDAP 2.6 server (StatefulSet + bootstrap)
+# openldap - OpenLDAP 2.6 server (StatefulSet + bootstrap)
 # =============================================================================
 openldap:
   enabled: true
 
 
   image:
-    # Runtime image — distroless, only runs slapd.
+    # Runtime image - distroless, only runs slapd.
     repository: cleanstart/openldap
     tag: "2.6.13"
     pullPolicy: IfNotPresent
 
-  # Override slapd's command / args entirely (escape hatch for exotic setups —
+  # Override slapd's command / args entirely (escape hatch for exotic setups -
   # e.g. running under strace, forcing a specific -d level, chrooting).
   # When empty, the chart uses:
   #   command: [slapd]
@@ -32,7 +32,7 @@ openldap:
   command: []
   args: []
 
-  # Bootstrap init image — needs a shell + slappasswd + slapadd.
+  # Bootstrap init image - needs a shell + slappasswd + slapadd.
   # Alpine's openldap package ships all required binaries and schemas; the
   # initContainer installs them at runtime so no custom image build is needed.
   initImage:
@@ -74,11 +74,11 @@ openldap:
 
     # Additional schemas loaded on top of core.ldif (which is always required
     # and loaded first). Names correspond to files under /etc/openldap/schema/
-    # in the OpenLDAP image — every standard schema ships there:
+    # in the OpenLDAP image - every standard schema ships there:
     #   cosine, inetorgperson, dyngroup, nis, misc, java, corba, openldap,
     #   collective, duaconf, dsee, pmi, msuser, namedobject
     # Add `nis` to enable POSIX accounts (uidNumber, gidNumber, homeDirectory,
-    # loginShell, shadow*) — required for SSH/UNIX login backed by LDAP; the
+    # loginShell, shadow*) - required for SSH/UNIX login backed by LDAP; the
     # chart adds matching indexes automatically.
     schemas:
       - cosine
@@ -90,13 +90,13 @@ openldap:
   # =============================================================================
   # Bring your own schemas (bank on top of core + directory.schemas) and/or
   # extra data LDIFs loaded during bootstrap. Every file goes through Helm's
-  # `tpl` — so you can reference {{ .Values.directory.suffix }} etc. inside
+  # `tpl` - so you can reference {{ .Values.directory.suffix }} etc. inside
   # your LDIF content.
   #
   # Precedence & timing:
-  #   * Custom SCHEMAS are `slapadd -n 0` — loaded into cn=schema,cn=config,
+  #   * Custom SCHEMAS are `slapadd -n 0` - loaded into cn=schema,cn=config,
   #     right after the chart's built-in schemas.
-  #   * Custom DATA is `slapadd -n 1` — loaded AFTER the chart's base tree
+  #   * Custom DATA is `slapadd -n 1` - loaded AFTER the chart's base tree
   #     (dc + OUs + [ha] replicator). Only runs on the seed pod (ordinal 0
   #     in HA, or the standalone pod).
   #
@@ -125,7 +125,7 @@ openldap:
   # =============================================================================
   # Replace the chart's chart-generated bootstrap ConfigMap with your own.
   # The referenced ConfigMap MUST carry exactly the same keys as the chart
-  # would emit — `bootstrap.sh`, `slapd-config.ldif`, `base-data.ldif` — so
+  # would emit - `bootstrap.sh`, `slapd-config.ldif`, `base-data.ldif` - so
   # the initContainer command-line stays valid. Only use this when you need
   # something the values-driven templates cannot express (e.g. shipping a
   # custom bootstrap.sh with extra logic).
@@ -133,7 +133,7 @@ openldap:
 
   customLdifs:
     # Inline data LDIF files. Loaded after the base tree, in alphabetical
-    # order by filename — prefix with `00-`, `10-`, ... to force ordering.
+    # order by filename - prefix with `00-`, `10-`, ... to force ordering.
     files: {}
     # Example:
     #   files:
@@ -155,14 +155,14 @@ openldap:
   #   1. ou=policies: readable by all
   #   2. <suffix> subtree: admin write, [ha: replicator read], users read
   #
-  # Every string here is rendered through Helm's `tpl` — reference
+  # Every string here is rendered through Helm's `tpl` - reference
   # {{ .Values.directory.suffix }}, {{ .Values.admin.bindDN }}, etc.
-  # Do NOT include the `{N}` index prefix — the chart numbers them in
+  # Do NOT include the `{N}` index prefix - the chart numbers them in
   # order (customAcls first, then extraAcls).
 
   # REPLACE the chart's default ACL block entirely. Empty = use defaults.
   customAcls: []
-  # Example — lock the tree down to admin + designated groups:
+  # Example - lock the tree down to admin + designated groups:
   #   customAcls:
   #     - 'to attrs=userPassword by self write by dn.exact="{{ .Values.admin.bindDN }}" write by anonymous auth by * none'
   #     - 'to dn.subtree="ou=groups,{{ .Values.directory.suffix }}" by group.exact="cn=group-admins,ou=groups,{{ .Values.directory.suffix }}" write by users read by * none'
@@ -170,7 +170,7 @@ openldap:
 
   # APPEND to the chart's default ACL block. Ignored when customAcls is set.
   extraAcls: []
-  # Example — grant a Grafana bot read-only access:
+  # Example - grant a Grafana bot read-only access:
   #   extraAcls:
   #     - 'to dn.subtree="ou=users,{{ .Values.directory.suffix }}" by dn.exact="cn=grafana,ou=service-accounts,{{ .Values.directory.suffix }}" read by * break'
 
@@ -178,7 +178,7 @@ openldap:
   # Admin credentials
   # =============================================================================
   admin:
-    # Data admin — rootDN of the main MDB database.
+    # Data admin - rootDN of the main MDB database.
     bindDN: cn=admin,dc=example,dc=org
 
     # If a Secret named `existingSecret` exists in the release namespace it MUST
@@ -215,7 +215,7 @@ openldap:
     # Suffix DB (dc=…).
     main:
       maxSizeBytes: 1073741824    # 1 GiB
-    # cn=accesslog DB — grows with bind + write traffic.
+    # cn=accesslog DB - grows with bind + write traffic.
     accesslog:
       maxSizeBytes: 1073741824    # 1 GiB
 
@@ -226,7 +226,7 @@ openldap:
     # Operations to log: writes | bind | reads | all
     ops: "writes bind"
     logSuccess: false
-    # Purge cadence — DD+HH:MM DD+HH:MM (interval before delete + oldest-to-keep).
+    # Purge cadence - DD+HH:MM DD+HH:MM (interval before delete + oldest-to-keep).
     purge: "07+00:00 01+00:00"
 
   # =============================================================================
@@ -252,7 +252,7 @@ openldap:
     enableLdapPort: true
     enableLdapsPort: true             # only takes effect when tls.enabled=true
 
-    # Dual-stack / traffic-routing knobs — passed through verbatim when set.
+    # Dual-stack / traffic-routing knobs - passed through verbatim when set.
     # ipFamilyPolicy: SingleStack | PreferDualStack | RequireDualStack
     ipFamilyPolicy: ""
     ipFamilies: []                    # e.g. [IPv4, IPv6]
@@ -324,7 +324,7 @@ openldap:
     disallowPlainBind: false
 
   # =============================================================================
-  # Replication — delta-syncrepl (activated automatically when mode != standalone)
+  # Replication - delta-syncrepl (activated automatically when mode != standalone)
   # =============================================================================
   replication:
     # olcServerID assigned to a pod = serverIdBase + ordinal.
@@ -348,13 +348,13 @@ openldap:
     #   ""         no StartTLS (plaintext or ldaps:// URL)
     #   yes        attempt StartTLS, continue on failure
     #   critical   REQUIRE StartTLS, abort session on failure
-    # Applies only when peer URLs are `ldap://` — `ldaps://` peers are already
+    # Applies only when peer URLs are `ldap://` - `ldaps://` peers are already
     # encrypted end-to-end.
     startTLS: ""
 
     # Certificate validation policy for TLS handshakes (applies to StartTLS
     # AND ldaps:// peers). Passed as `tls_reqcert=<value>` on each olcSyncRepl.
-    #   ""      omit — inherit slapd's global olcTLSVerifyClient
+    #   ""      omit - inherit slapd's global olcTLSVerifyClient
     #   never   don't validate (dev only)
     #   allow   validate if presented, ignore failure
     #   try     validate if presented, abort on failure
@@ -370,7 +370,7 @@ openldap:
     # olcAccess / overlays / schema / ppolicy changes propagate instead of
     # staying on whichever pod the ClusterIP Service happened to pick.
     # Switches olcServerID to the URL form and pins slapd's listeners.
-    # Read-only replicas get the cn=schema subtree only — without it their
+    # Read-only replicas get the cn=schema subtree only - without it their
     # syncrepl stalls silently on the first entry using a runtime-added
     # objectClass. See charts/openldap/values.yaml for the full rationale.
     replicateConfig:
@@ -378,7 +378,7 @@ openldap:
       checkpoint: "100 10"
       sessionLog: 100
 
-    # Replicator credentials — used by every peer to bind at each other peer
+    # Replicator credentials - used by every peer to bind at each other peer
     # for the delta-syncrepl pull. Password auto-generated on first install
     # and preserved across upgrades (same lookup pattern as admin secret).
     # Override with an existing Secret carrying `replicator-password`:
@@ -388,12 +388,12 @@ openldap:
 
     # Only the pod with ordinal 0 loads the base directory data on first
     # install; other pods start empty and sync from ordinal 0.
-    # Set to false if you want every pod to seed independently (dangerous —
+    # Set to false if you want every pod to seed independently (dangerous -
     # split-brain risk before syncrepl converges).
     seedOnOrdinalZeroOnly: true
 
   # =============================================================================
-  # Read-only replicas — separate StatefulSet of syncrepl consumers.
+  # Read-only replicas - separate StatefulSet of syncrepl consumers.
   # Point read-heavy clients at the `<release>-openldap-readonly` Service
   # to spread load without touching the write pool. Requires mode != standalone
   # (RO consumers pull from writable peers).
@@ -410,7 +410,7 @@ openldap:
     serverIdBase: 100
 
     # slapd rejects client writes on RO pods (olcReadOnly: TRUE). Syncrepl
-    # still updates the DB internally — this only blocks external writes.
+    # still updates the DB internally - this only blocks external writes.
     # Set to false if you want the RO pool to be promoteable to writable in
     # a failover scenario (leaves the door open for a client-side write that
     # would then be overwritten by syncrepl).
@@ -438,7 +438,7 @@ openldap:
       annotations: {}
 
   # =============================================================================
-  # Autoscaling — HorizontalPodAutoscaler v2 targeting the writable STS
+  # Autoscaling - HorizontalPodAutoscaler v2 targeting the writable STS
   # =============================================================================
   # ONLY valid for mode=multi-master. The chart fails render if
   # hpa.enabled=true and mode != multi-master.
@@ -451,7 +451,7 @@ openldap:
     minReplicas: 2
     maxReplicas: 5
 
-    # metrics[] follows the autoscaling/v2 HPA spec verbatim — Resource,
+    # metrics[] follows the autoscaling/v2 HPA spec verbatim - Resource,
     # ContainerResource, Pods, Object, External. Default = 70% CPU + 80% memory.
     metrics:
       - type: Resource
@@ -466,7 +466,7 @@ openldap:
           target:
             type: Utilization
             averageUtilization: 80
-    # Example — Prometheus-backed LDAP metric via prometheus-adapter
+    # Example - Prometheus-backed LDAP metric via prometheus-adapter
     # (metric name after adapter transformation), when
     # openldap.monitoring.enabled=true feeds the exporter to Prometheus.
     # Also works with KEDA's `type: External` shape.
@@ -494,7 +494,7 @@ openldap:
     behavior: {}
 
   # =============================================================================
-  # Scale watcher — Deployment that bridges HPA scale events to a rolling
+  # Scale watcher - Deployment that bridges HPA scale events to a rolling
   # restart so every existing pod reconciles cn=config against the new
   # REPLICA_COUNT. Auto-emitted with hpa.enabled OR scaleSchedule.
   # =============================================================================
@@ -505,7 +505,7 @@ openldap:
       limits:   { cpu: 100m, memory: 128Mi }
 
   # =============================================================================
-  # Time-of-day scaling — CronJobs that patch HPA min/max at scheduled times
+  # Time-of-day scaling - CronJobs that patch HPA min/max at scheduled times
   # =============================================================================
   # Chart-native (no KEDA dep): each entry emits one CronJob that runs
   # `kubectl patch hpa` at its schedule to adjust the HPA's min/max window.
@@ -523,7 +523,7 @@ openldap:
   #       maxReplicas: 3
 
   # =============================================================================
-  # openldap-cli — used by all sync Jobs (ppolicy, users, groups) as Helm
+  # openldap-cli - used by all sync Jobs (ppolicy, users, groups) as Helm
   # post-install / post-upgrade hooks. CLI + kubectl are downloaded on the fly
   # from GitHub / dl.k8s.io so no custom image build is required.
   # =============================================================================
@@ -549,10 +549,10 @@ openldap:
   # =============================================================================
   # Password policies (ppolicy templates under ou=policies,<suffix>)
   # =============================================================================
-  # Applied via `openldap-cli ppolicy set` (idempotent — creates or updates).
-  # Fields map 1:1 to the CLI flags — every entry key becomes `--<key>`.
+  # Applied via `openldap-cli ppolicy set` (idempotent - creates or updates).
+  # Fields map 1:1 to the CLI flags - every entry key becomes `--<key>`.
   # The chart-managed default policy referenced by ppolicy.defaultPolicyRDN
-  # (see the ppolicy section above) is NOT auto-created — declare it here
+  # (see the ppolicy section above) is NOT auto-created - declare it here
   # too if you want the sync Job to manage it.
   policies: []
   # Example:
@@ -587,7 +587,7 @@ openldap:
   #       mail: alice@example.org              # optional (defaults to <uid>@<mail_domain>)
   #       displayName: "Alice Wonderland"      # optional
   #       policy: defaultppolicy               # optional (ppolicy assign)
-  #       existingSecret: ""                   # optional — Secret carrying `password` key
+  #       existingSecret: ""                   # optional - Secret carrying `password` key
   #       # extra: any k=v pair below `attrs` is passed to `user set` verbatim
   #       attrs:
   #         telephoneNumber: "+33-1-00-00-00-00"
@@ -602,7 +602,7 @@ openldap:
   onUserRemove: delete
 
   # =============================================================================
-  # Groups (groupOfNames — each group MUST have ≥ 1 member per LDAP schema)
+  # Groups (groupOfNames - each group MUST have ≥ 1 member per LDAP schema)
   # =============================================================================
   # Applied via `openldap-cli group create` (initial) then reconciled with
   # `group add-member` / `group remove-member`. `members` lists user UIDs;
@@ -621,7 +621,7 @@ openldap:
   onGroupRemove: delete
 
   # =============================================================================
-  # Declarative ACLs — openldap-cli config acl grant/revoke (CLI ≥ v2026.7.4)
+  # Declarative ACLs - openldap-cli config acl grant/revoke (CLI ≥ v2026.7.4)
   # =============================================================================
   # Each entry becomes one olcAccess clause on the target database. The chart
   # owns the grantee (group or DN): on every helm upgrade every clause referencing
@@ -631,7 +631,7 @@ openldap:
   #
   # Caveats:
   #   * Managed grantees (group/dn) MUST NOT also appear in hand-edited olcAccess
-  #     rules or customAcls — they will be wiped on reconcile.
+  #     rules or customAcls - they will be wiped on reconcile.
   #   * A single grantee should appear in ONE entry only. Multiple clauses per
   #     grantee require the raw customAcls/extraAcls path.
   #   * The CLI auto-places new rules above the rule that would shadow them; set
@@ -641,7 +641,7 @@ openldap:
   #   acls:
   #     - name: readers-can-read-users             # chart-local identifier (unique)
   #       target: "ou=users,dc=example,dc=org"
-  #       group: readers                           # grantee — group OR dn (exclusive)
+  #       group: readers                           # grantee - group OR dn (exclusive)
   #       access: read                             # read | write
   #       # Optional:
   #       database: "olcDatabase={1}mdb,cn=config" # defaults to main data DB
@@ -651,9 +651,9 @@ openldap:
   #       terminator: break                        # break | none
 
   # =============================================================================
-  # Tree-scoped grants — openldap-cli svc grant/revoke (CLI ≥ v2026.7.4)
+  # Tree-scoped grants - openldap-cli svc grant/revoke (CLI ≥ v2026.7.4)
   # =============================================================================
-  # Higher-level than `acls:` — emits BOTH the container rule (enables tree as
+  # Higher-level than `acls:` - emits BOTH the container rule (enables tree as
   # search-base) and the entry rule (read/write) for a service account, auto-
   # placed above shadowing rules. Ideal for scoping a service to a subtree.
   # The chart tracks state per (name, tree) tuple and revokes on removal.
@@ -667,7 +667,7 @@ openldap:
   #       membersOf: admins                        # limit entry rule to group members
 
   # =============================================================================
-  # Overlays — openldap-cli config overlay enable/disable (CLI ≥ v2026.7.4)
+  # Overlays - openldap-cli config overlay enable/disable (CLI ≥ v2026.7.4)
   # =============================================================================
   # Toggle overlays on the main data database. `enable: true` loads the module
   # (unless noModule=true) then adds the overlay; `enable: false` sets
@@ -689,11 +689,11 @@ openldap:
   #     #   noModule: false                         # true = fail if module not preloaded
 
   # =============================================================================
-  # ACL lint — periodic `openldap-cli config acl lint` (CLI ≥ v2026.7.4)
+  # ACL lint - periodic `openldap-cli config acl lint` (CLI ≥ v2026.7.4)
   # =============================================================================
   # CronJob that reports unreachable (shadowed) and no-op olcAccess rules.
   # Exits non-zero if any are found so the CronJob shows as Failed and can wire
-  # into alerting. Read-only — writes nothing to cn=config.
+  # into alerting. Read-only - writes nothing to cn=config.
   aclLintCronJob:
     enabled: false
     schedule: "0 6 * * *"          # daily 06:00
@@ -721,13 +721,13 @@ openldap:
       pathPrefix: ""
 
   # =============================================================================
-  # Backup — CronJob driving `openldap-cli backup data|config` on a schedule.
+  # Backup - CronJob driving `openldap-cli backup data|config` on a schedule.
   # =============================================================================
   backup:
     enabled: false
     schedule: "0 22 * * *"
     # Retention in days for local dumps (find -mtime +N -delete). Ignored when
-    # persistence is off — remote-only backups must set retention at the object
+    # persistence is off - remote-only backups must set retention at the object
     # store level.
     retentionDays: 30
 
@@ -736,7 +736,7 @@ openldap:
     # topology; drop it when the dump is for import into a different tree.
     includeOperational: true
 
-    # File name pattern — supports `{{ "{{" }} .date {{ "}}" }}` (UTC YYYYMMDD) and `{{ "{{" }} .kind {{ "}}" }}`
+    # File name pattern - supports `{{ "{{" }} .date {{ "}}" }}` (UTC YYYYMMDD) and `{{ "{{" }} .kind {{ "}}" }}`
     # (`data` or `config`). Files are always gzipped (`.gz` triggers automatic
     # gzip in openldap-cli).
     fileNamePattern: "{{ .kind }}_{{ .date }}.ldif.gz"
@@ -750,8 +750,8 @@ openldap:
       # Set to reuse an existing PVC instead of creating one.
       existingClaim: ""
 
-    # Optional remote destination — copied AFTER the local dump succeeds.
-    # Not implemented yet — the fields are reserved so enabling this in a
+    # Optional remote destination - copied AFTER the local dump succeeds.
+    # Not implemented yet - the fields are reserved so enabling this in a
     # future release doesn't change the values schema.
     s3:
       enabled: false
@@ -766,7 +766,7 @@ openldap:
       limits:   { cpu: 500m, memory: 512Mi }
 
   # =============================================================================
-  # Accesslog purge — periodic CronJob calling `openldap-cli ops accesslog-purge`
+  # Accesslog purge - periodic CronJob calling `openldap-cli ops accesslog-purge`
   # to shrink the accesslog MDB (slapd's built-in olcAccessLogPurge deletes
   # entries but does not reclaim MDB space; this Job does the reclaim).
   # =============================================================================
@@ -774,7 +774,7 @@ openldap:
     enabled: false
     schedule: "0 3 * * 0"          # Sundays at 03:00
     keepDays: 7
-    # DD+HH:MM — how often to sweep + the age threshold slapd applies.
+    # DD+HH:MM - how often to sweep + the age threshold slapd applies.
     sweep: "00+06:00"
     dryRun: false
     resources:
@@ -782,7 +782,7 @@ openldap:
       limits:   { cpu: 500m, memory: 256Mi }
 
   # =============================================================================
-  # Monitoring — Prometheus exporter sidecar + optional ServiceMonitor / rules.
+  # Monitoring - Prometheus exporter sidecar + optional ServiceMonitor / rules.
   # =============================================================================
   monitoring:
     enabled: false
@@ -794,7 +794,7 @@ openldap:
         pullPolicy: IfNotPresent
       port: 9330
 
-      # Extra env vars passed to the exporter container — see
+      # Extra env vars passed to the exporter container - see
       # https://github.com/maximewewer/openldap_prometheus_exporter for the full
       # reference (LDAP_TIMEOUT, RATE_LIMIT_*, CIRCUIT_BREAKER_*, …).
       extraEnv: []
@@ -836,18 +836,18 @@ openldap:
     mode: ingress-nginx
 
     # Externally-reachable hostname of the LDAPS endpoint. Required in every
-    # mode — used both as the SNI host and as the Certificate SAN when TLS is
+    # mode - used both as the SNI host and as the Certificate SAN when TLS is
     # produced by cert-manager or the tls Job.
     host: ""                      # e.g. ldap.example.com
 
-    # LDAPS Ingress — assumes controller has `--enable-ssl-passthrough`
+    # LDAPS Ingress - assumes controller has `--enable-ssl-passthrough`
     # (SNI-based TCP proxying, since LDAPS is not HTTP). Plaintext LDAP (389)
     # is not exposed here; use a LoadBalancer/NodePort Service if you need it
     # externally.
     ingressNginx:
       className: nginx
       annotations: {}
-      # ssl-passthrough IS the point — do not disable unless you know what you're
+      # ssl-passthrough IS the point - do not disable unless you know what you're
       # doing (the controller then terminates TLS itself and can't proxy LDAPS).
       sslPassthrough: true
 
@@ -862,7 +862,7 @@ openldap:
       port: 636
 
   # =============================================================================
-  # Hardening — strict defaults (non-root, drop-all caps, read-only rootfs
+  # Hardening - strict defaults (non-root, drop-all caps, read-only rootfs
   # on the server + exporter containers).
   # =============================================================================
   serviceAccount:
@@ -899,7 +899,7 @@ openldap:
   podLabels: {}
   nodeSelector: {}
   tolerations: []
-  # Full pod affinity — takes precedence over the presets below when set.
+  # Full pod affinity - takes precedence over the presets below when set.
   affinity: {}
   topologySpreadConstraints: []
   priorityClassName: ""
@@ -911,7 +911,7 @@ openldap:
   #
   # podAntiAffinityPreset: "" | soft | hard
   podAntiAffinityPreset: ""
-  # nodeAffinityPreset — pin pods to nodes matching a label key/values.
+  # nodeAffinityPreset - pin pods to nodes matching a label key/values.
   #   type: "" | soft | hard
   #   key:  node label to select on
   #   values: [] list of accepted values
@@ -921,7 +921,7 @@ openldap:
     values: []
 
   # =============================================================================
-  # Extension points — inject arbitrary volumes / mounts / containers / manifests
+  # Extension points - inject arbitrary volumes / mounts / containers / manifests
   # without forking the chart. Applied to the openldap StatefulSet (server pods).
   # =============================================================================
 
@@ -980,19 +980,19 @@ openldap:
   #       key: value
 
   # =============================================================================
-  # PodDisruptionBudget — HA-safe voluntary eviction guard.
+  # PodDisruptionBudget - HA-safe voluntary eviction guard.
   # =============================================================================
   podDisruptionBudget:
     # Auto: create iff mode != standalone. Set to true/false to force.
     enabled: "auto"
     # If both are empty, defaults to `minAvailable: <replicas - 1>`. Set only
-    # one — Kubernetes rejects PDBs that set both.
+    # one - Kubernetes rejects PDBs that set both.
     minAvailable: ""
     maxUnavailable: ""
     unhealthyPodEvictionPolicy: ""     # "" | AlwaysAllow | IfHealthyBudget (K8s ≥ 1.27)
 
   # =============================================================================
-  # NetworkPolicy — default-deny + explicit allows scoped to what actually
+  # NetworkPolicy - default-deny + explicit allows scoped to what actually
   # needs to talk to slapd.
   # =============================================================================
   networkPolicy:
@@ -1052,7 +1052,7 @@ openldap:
     failureThreshold: 60
 
 # =============================================================================
-# phpldapadmin — web UI for browsing / editing
+# phpldapadmin - web UI for browsing / editing
 # =============================================================================
 phpldapadmin:
   enabled: false
@@ -1093,7 +1093,7 @@ phpldapadmin:
   # doesn't exist and existingSecret is empty, a Secret is auto-generated with
   # a random 32-char password so the deployment doesn't leave a placeholder
   # credential behind. Whichever password lands there must ALSO exist in the
-  # LDAP directory — the sibling openldap subchart can seed it via
+  # LDAP directory - the sibling openldap subchart can seed it via
   # `openldap.users`:
   #
   #   openldap:
@@ -1113,7 +1113,7 @@ phpldapadmin:
     # Base URL exposed to the browser. Overwritten if ingress.host is set.
     url: "http://localhost:8080"
     timezone: "UTC"
-    # APP_KEY (Laravel) — chart-managed; auto-generated on first install and
+    # APP_KEY (Laravel) - chart-managed; auto-generated on first install and
     # preserved across upgrades via `lookup`. Set to reuse an existing Secret
     # carrying the key `app-key` (base64:<32-byte-key>).
     keyExistingSecret: ""
@@ -1129,7 +1129,7 @@ phpldapadmin:
   # =============================================================================
   # Ingress
   # =============================================================================
-  # phpLDAPadmin IS HTTP — no ssl-passthrough gymnastics. The chart supports
+  # phpLDAPadmin IS HTTP - no ssl-passthrough gymnastics. The chart supports
   # the same two modes as the openldap subchart: ingress-nginx (with an
   # optional TLS Secret) or Gateway API (HTTPRoute).
   ingress:
@@ -1176,7 +1176,7 @@ phpldapadmin:
     # live INSIDE /app and cannot be relocated to an emptyDir without losing
     # image content like storage/framework/views), then serves via Caddy on
     # 8080. Running non-root or with a read-only root FS breaks it. The
-    # trade-off is documented — if you need PSA restricted, rebuild the image
+    # trade-off is documented - if you need PSA restricted, rebuild the image
     # to run as an unprivileged user with mutable state under emptyDir mounts.
     seccompProfile:
       type: RuntimeDefault
@@ -1201,7 +1201,7 @@ phpldapadmin:
   topologySpreadConstraints: []
 
   # =============================================================================
-  # Extension points — inject arbitrary volumes / mounts / containers / manifests
+  # Extension points - inject arbitrary volumes / mounts / containers / manifests
   # without forking the chart.
   # =============================================================================
   extraEnv: []
@@ -1226,7 +1226,7 @@ phpldapadmin:
     periodSeconds: 10
 
 # =============================================================================
-# self-service-password — LTB end-user password change / reset UI
+# self-service-password - LTB end-user password change / reset UI
 # =============================================================================
 self-service-password:
   enabled: false
@@ -1282,7 +1282,7 @@ self-service-password:
     allowedLanguages: ["en", "fr"]
 
   # =============================================================================
-  # Password policy — mirrors self-service-password's config_ppolicy.
+  # Password policy - mirrors self-service-password's config_ppolicy.
   # =============================================================================
   passwordPolicy:
     hash: "auto"                      # auto | SSHA | SHA | SMD5 | MD5 | CRYPT | clear
@@ -1301,14 +1301,14 @@ self-service-password:
     usePwnedPasswords: false
 
   # =============================================================================
-  # Feature toggles (disabled by default — mail SMTP wiring in extraConfig)
+  # Feature toggles (disabled by default - mail SMTP wiring in extraConfig)
   # =============================================================================
   useTokens: false
   useQuestions: false
   useSms: false
 
   # =============================================================================
-  # Mail (optional — populate when useTokens=true and you want email links)
+  # Mail (optional - populate when useTokens=true and you want email links)
   # =============================================================================
   mail:
     from: ""
@@ -1323,7 +1323,7 @@ self-service-password:
     smtpPasswordKey: password
 
   # =============================================================================
-  # Extra config — raw PHP lines appended to config.inc.local.php verbatim.
+  # Extra config - raw PHP lines appended to config.inc.local.php verbatim.
   # Use this escape hatch for anything the values above don't expose.
   # =============================================================================
   extraConfig: ""
@@ -1341,7 +1341,7 @@ self-service-password:
     annotations: {}
 
   # =============================================================================
-  # Ingress — HTTP UI, same shape as the phpldapadmin subchart.
+  # Ingress - HTTP UI, same shape as the phpldapadmin subchart.
   # =============================================================================
   ingress:
     enabled: false
@@ -1401,7 +1401,7 @@ self-service-password:
   topologySpreadConstraints: []
 
   # =============================================================================
-  # Extension points — inject arbitrary volumes / mounts / containers / manifests
+  # Extension points - inject arbitrary volumes / mounts / containers / manifests
   # without forking the chart.
   # =============================================================================
   extraEnv: []

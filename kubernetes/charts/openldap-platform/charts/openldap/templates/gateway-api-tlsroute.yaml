@@ -1,6 +1,6 @@
 {{- if and .Values.ingress.enabled (eq .Values.ingress.mode "gateway-api") -}}
 {{- if not .Values.tls.enabled -}}
-{{- fail "ingress.enabled=true with mode=gateway-api requires tls.enabled=true (TLSRoute is SNI-based passthrough — plaintext LDAP needs a separate LoadBalancer/NodePort)" -}}
+{{- fail "ingress.enabled=true with mode=gateway-api requires tls.enabled=true (TLSRoute is SNI-based passthrough - plaintext LDAP needs a separate LoadBalancer/NodePort)" -}}
 {{- end -}}
 {{- required "ingress.host is required" .Values.ingress.host -}}
 {{- $fullName := include "openldap.fullname" . -}}

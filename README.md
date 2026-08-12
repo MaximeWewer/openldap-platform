@@ -1,7 +1,7 @@
 # OpenLDAP platform
 
 Production-oriented **OpenLDAP** deployment recipes, packaged per target
-platform. Same directory tree, same overlays, same companion CLI — pick the
+platform. Same directory tree, same overlays, same companion CLI - pick the
 runtime that matches your infrastructure.
 
 ## Layouts
@@ -30,8 +30,8 @@ Behaviours common to both platforms:
 
 Kubernetes-only additions:
 
-- Six declarative blocks reconciled on every `helm upgrade` — users, groups, policies, ACLs, tree-grants, overlays — one post-install/upgrade sync Job each
-- Full-auto horizontal scaling in `multi-master`: HPA v2 (CPU/mem/Prometheus-adapter metrics) + chart-native cron scale windows (`scaleSchedule`), with an in-cluster scale-watcher Deployment that rebuilds `cn=config` peer topology on every scale event — no manual `kubectl rollout restart`
+- Six declarative blocks reconciled on every `helm upgrade` - users, groups, policies, ACLs, tree-grants, overlays - one post-install/upgrade sync Job each
+- Full-auto horizontal scaling in `multi-master`: HPA v2 (CPU/mem/Prometheus-adapter metrics) + chart-native cron scale windows (`scaleSchedule`), with an in-cluster scale-watcher Deployment that rebuilds `cn=config` peer topology on every scale event - no manual `kubectl rollout restart`
 - Periodic `config acl lint` CronJob to flag shadowed / no-op olcAccess rules
 - Per-user password Secret backend (nothing sensitive in `values.yaml`)
 - Three TLS backends: `cert-manager`, in-cluster `job` (self-signed + auto-renew + rolling restart), or user-`provided`
@@ -42,8 +42,8 @@ Kubernetes-only additions:
 
 ## Companion tooling
 
-- **[openldap-cli](https://github.com/maximewewer/openldap-cli)** — single static Go binary. Day-to-day admin (users, groups, ppolicy, backup, diagnostics). Called by Docker admins directly and by the Kubernetes chart's sync Jobs.
-- **[openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter)** — Prometheus scraper for `cn=Monitor`. Docker: sidecar container; Kubernetes: sidecar in the StatefulSet + `ServiceMonitor` + baseline `PrometheusRule`.
+- **[openldap-cli](https://github.com/maximewewer/openldap-cli)** - single static Go binary. Day-to-day admin (users, groups, ppolicy, backup, diagnostics). Called by Docker admins directly and by the Kubernetes chart's sync Jobs.
+- **[openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter)** - Prometheus scraper for `cn=Monitor`. Docker: sidecar container; Kubernetes: sidecar in the StatefulSet + `ServiceMonitor` + baseline `PrometheusRule`.
 
 ## Quick start
 

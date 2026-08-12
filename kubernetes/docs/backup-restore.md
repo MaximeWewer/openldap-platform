@@ -2,11 +2,11 @@
 
 The chart takes two kinds of backup with `backup.enabled: true`:
 
-- **Data dump** — `openldap-cli backup data /backup/data_<date>.ldif.gz`
-  — every entry under the suffix, including operational attrs if
+- **Data dump** - `openldap-cli backup data /backup/data_<date>.ldif.gz`
+  - every entry under the suffix, including operational attrs if
   `backup.includeOperational: true` (default).
-- **Config dump** — `openldap-cli backup config /backup/config_<date>.ldif.gz`
-  — every entry under `cn=config` (schemas, overlays, ACLs, DB defs).
+- **Config dump** - `openldap-cli backup config /backup/config_<date>.ldif.gz`
+  - every entry under `cn=config` (schemas, overlays, ACLs, DB defs).
 
 Both are stored on the chart-managed PVC
 `<release>-openldap-backup` (or `backup.persistence.existingClaim`),
@@ -32,7 +32,7 @@ kubectl -n $NS cp backup-shell:/backup/data_20260716.ldif.gz \
   ./data_20260716.ldif.gz
 ```
 
-Simpler alternative — the same PVC can be mounted read-only in a debug
+Simpler alternative - the same PVC can be mounted read-only in a debug
 pod:
 
 ```bash
@@ -44,7 +44,7 @@ kubectl -n $NS debug --image=alpine:3.24 pod/ldap-openldap-0 \
 
 ### A. Rollback a specific user/group change
 
-The sync Jobs are declarative — the cleanest way is to revert the
+The sync Jobs are declarative - the cleanest way is to revert the
 `openldap.users` / `openldap.groups` change in Git and let the next
 `helm upgrade` reconcile. Deleted users can be re-created (with a fresh
 password) or their DN + password restored from the dump:
@@ -61,13 +61,13 @@ kubectl -n $NS exec ldap-openldap-0 -c openldap -- \
     -D cn=admin,dc=example,dc=org -w "$PW" -f /tmp/alice.ldif
 ```
 
-### B. Full DR — restore into a fresh install
+### B. Full DR - restore into a fresh install
 
 Assumes total loss (namespace wiped, all PVCs gone, but the backup PVC
 survived, or the LDIF dumps are stored offsite).
 
 1. **Reinstall the chart** with the same values (suffix, admin DN, ...)
-   but WITHOUT any `users` / `groups` / `policies` — they'll be
+   but WITHOUT any `users` / `groups` / `policies` - they'll be
    reconstituted from the dump, not from the sync Jobs.
 
    ```bash
@@ -77,7 +77,7 @@ survived, or the LDIF dumps are stored offsite).
    ```
 
 2. **Wait for pod-0 to be Ready.** The bootstrap creates an empty
-   directory tree — the dc entry + OUs, no users.
+   directory tree - the dc entry + OUs, no users.
 
 3. **Restore the data dump.**
 
@@ -88,7 +88,7 @@ survived, or the LDIF dumps are stored offsite).
      ldap-openldap-0:/tmp/restore.ldif.gz
    ```
 
-   Run `backup restore` — the CLI handles gzipped input transparently:
+   Run `backup restore` - the CLI handles gzipped input transparently:
 
    ```bash
    kubectl -n ldap exec ldap-openldap-0 -c openldap -- \
@@ -105,13 +105,13 @@ survived, or the LDIF dumps are stored offsite).
    openldap-cli backup restore /tmp/restore.ldif.gz'
    ```
 
-   > The pod's slapd container is distroless — no shell, no
+   > The pod's slapd container is distroless - no shell, no
    > openldap-cli. Do the restore from a temporary utility pod that
    > mounts the openldap image with a shell, or run the restore against
    > the LDAP Service from a sync-Job-like pod that already ships the
    > CLI.
 
-   Simpler variant — a one-shot Job using the same image as the sync
+   Simpler variant - a one-shot Job using the same image as the sync
    Jobs:
 
    ```yaml
@@ -164,7 +164,7 @@ survived, or the LDIF dumps are stored offsite).
 
 ### C. Restore cn=config (schema / overlays)
 
-Rare — the chart's bootstrap already regenerates a working cn=config
+Rare - the chart's bootstrap already regenerates a working cn=config
 from values.yaml. Restore config ONLY when:
 
 - You modified cn=config out-of-band and want the old state back.
@@ -190,7 +190,7 @@ pod that mounts the same PVC, scale back up.
 Restore the data dump on ONE pod (usually ordinal 0) with syncrepl
 temporarily paused (drop the pod from the Service selector via a label
 hack, or scale peers to 0). Once the restore completes and pod-0 is
-back in sync-provider mode, scale the peers back up — they pull the
+back in sync-provider mode, scale the peers back up - they pull the
 restored tree via syncrepl.
 
 The order matters:

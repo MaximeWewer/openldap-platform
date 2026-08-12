@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# GitRepository — Flux source of truth for the chart.
+# GitRepository - Flux source of truth for the chart.
 #
 # Usage:
 #   1. Replace REPO_URL with your fork's coordinates.

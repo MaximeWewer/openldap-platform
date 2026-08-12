@@ -13,12 +13,12 @@ Access the UI:
   open http://localhost:8080
 {{- end }}
 
-Log in as any LDAP user (uid + password) — or use an admin DN if you need
+Log in as any LDAP user (uid + password) - or use an admin DN if you need
 to write.
 {{- if .Values.bind.username }}
 
 Bootstrap bind identity: {{ .Values.bind.username }}
 Password source: Secret {{ include "phpldapadmin.bindSecretName" . }} (key `bindpw`)
-Make sure this DN actually exists in the LDAP tree — the sibling openldap
+Make sure this DN actually exists in the LDAP tree - the sibling openldap
 subchart can seed it via openldap.users.
 {{- end }}

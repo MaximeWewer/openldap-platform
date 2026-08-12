@@ -13,7 +13,7 @@ metadata:
   labels:
     {{- include "openldap.labels" . | nindent 4 }}
 spec:
-  # Server pods only — sync/backup/tls Jobs share the openldap `name` label
+  # Server pods only - sync/backup/tls Jobs share the openldap `name` label
   # but carry `component: <role>` and must not be caught by this policy.
   podSelector:
     matchLabels:
@@ -48,7 +48,7 @@ spec:
         {{- end }}
     {{- end }}
 
-    # 2) Sync / backup / purge / tls-renew Jobs — identified by the
+    # 2) Sync / backup / purge / tls-renew Jobs - identified by the
     #    chart's SA-derived component label.
     - from:
         - podSelector:
@@ -97,7 +97,7 @@ spec:
   # Egress
   # ---------------------------------------------------------------------------
   egress:
-    # DNS (kube-dns / CoreDNS) — LDAP does peer + external-peer resolution.
+    # DNS (kube-dns / CoreDNS) - LDAP does peer + external-peer resolution.
     - to:
         - namespaceSelector: {}
           podSelector:
@@ -125,7 +125,7 @@ spec:
         {{- end }}
     {{- end }}
 
-    # External LDAPS peers — either explicit CIDRs or the whole internet.
+    # External LDAPS peers - either explicit CIDRs or the whole internet.
     {{- if and $ha .Values.replication.externalPeers }}
     - to:
         {{- if .Values.networkPolicy.externalPeerCIDRs }}

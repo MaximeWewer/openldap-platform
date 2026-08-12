@@ -1,7 +1,7 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 #
-# OpenLDAP HA — Active-Active (N-way Multi-Master) — 3 VMs
+# OpenLDAP HA - Active-Active (N-way Multi-Master) - 3 VMs
 #
 #   vagrant up                  # boot cluster
 #   vagrant ssh ldap1           # shell into node 1

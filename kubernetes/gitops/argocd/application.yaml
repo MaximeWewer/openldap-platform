@@ -27,7 +27,7 @@ spec:
         - values.yaml
         - ../../envs/prod/values.yaml            # optional overlay
       # Any critical secret should come from external-secrets or sealed-secrets,
-      # NOT from this Application spec — inline values end up in Argo's config.
+      # NOT from this Application spec - inline values end up in Argo's config.
       parameters:
         - name: openldap.mode
           value: multi-master

@@ -16,14 +16,14 @@ Access:
 
 Users authenticate with `{{ .Values.ldap.loginAttribute }}` + current password and can set a
 new one. SSP performs the change over the user's own bind, so no extra
-ACL beyond the default `by self write` on userPassword is needed —
+ACL beyond the default `by self write` on userPassword is needed -
 provided you keep the `ldap.bind.dn` account able to search the tree.
 
 {{- if not .Values.ldap.bind.existingSecret }}
 
 WARNING: `ldap.bind.existingSecret` is empty. SSP will boot with an empty
 bind password and search operations will fail. Point it at a Secret with
-key `{{ .Values.ldap.bind.secretKey }}` — the easiest path is to declare a
+key `{{ .Values.ldap.bind.secretKey }}` - the easiest path is to declare a
 matching entry under `openldap.users`:
 
     openldap:

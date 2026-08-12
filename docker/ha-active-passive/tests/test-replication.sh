@@ -113,14 +113,14 @@ EOF
     fi
     ldapdelete -x -H "${PEERS[$LAST_IDX]}" -D "$ADMIN_DN" -w "$ADMIN_PW" "$REV_DN" 2>/dev/null || true
   else
-    echo "  Write rejected on ${PEERS[$LAST_IDX]} (read-only consumer — expected in mirror mode)"
+    echo "  Write rejected on ${PEERS[$LAST_IDX]} (read-only consumer - expected in mirror mode)"
   fi
 fi
 
 # === 5. cn=config convergence (only when REPLICATE_CONFIG=true) ===
 # Masters only: consumers (peer index >= 2) never consume cn=config by design.
-# Writes a harmless olcLimits entry for a non-existent DN — no behavioural
-# effect — and removes it on exit, so this is safe against a live cluster.
+# Writes a harmless olcLimits entry for a non-existent DN - no behavioural
+# effect - and removes it on exit, so this is safe against a live cluster.
 if [ "$REPLICATE_CONFIG" = "true" ] && [ "${#PEERS[@]}" -ge 2 ]; then
   MASTERS=("${PEERS[0]}" "${PEERS[1]}")
   MDB_DN="olcDatabase={1}mdb,cn=config"
@@ -162,7 +162,7 @@ EOF
   done
 
   if [ "${#PEERS[@]}" -gt 2 ]; then
-    echo "  (consumers skipped — they never consume cn=config by design)"
+    echo "  (consumers skipped - they never consume cn=config by design)"
   fi
 
   echo

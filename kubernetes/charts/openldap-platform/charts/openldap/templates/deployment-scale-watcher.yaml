@@ -1,5 +1,5 @@
 {{- /*
-Scale watcher — a 1-replica Deployment that watches STS.spec.replicas and
+Scale watcher - a 1-replica Deployment that watches STS.spec.replicas and
 issues `kubectl rollout restart` on change so every existing pod reruns
 bootstrap and reconciles cn=config against the new peer count.
 
@@ -9,7 +9,7 @@ automatically. But HPA changes STS.spec.replicas WITHOUT touching the
 values or the annotation, so existing pods never restart. The watcher
 closes that gap.
 
-Emitted only when mode=multi-master AND (hpa.enabled OR scaleSchedule) —
+Emitted only when mode=multi-master AND (hpa.enabled OR scaleSchedule) -
 manual scaling doesn't need it, and standalone/mirror have fixed replicas.
 */}}
 {{- if and (eq .Values.mode "multi-master") (or .Values.hpa.enabled .Values.scaleSchedule) -}}
@@ -39,7 +39,7 @@ spec:
       serviceAccountName: {{ $fullName }}-sync
       automountServiceAccountToken: true
       securityContext:
-        # apk add + writes to /usr/local/bin need root — same as the sync
+        # apk add + writes to /usr/local/bin need root - same as the sync
         # Jobs, which run rootful for the same reason. slapd itself is
         # unaffected (runs in a different pod/container).
         runAsNonRoot: false
@@ -68,7 +68,7 @@ spec:
                 CURRENT=$(kubectl -n "${NS}" get sts "${STS}" \
                   -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "")
                 if [ -n "${CURRENT}" ] && [ -n "${LAST}" ] && [ "${CURRENT}" != "${LAST}" ]; then
-                  echo "[scale-watcher] spec.replicas changed ${LAST} -> ${CURRENT} — rolling restart"
+                  echo "[scale-watcher] spec.replicas changed ${LAST} -> ${CURRENT} - rolling restart"
                   # `kubectl rollout restart` stamps kubectl.k8s.io/restartedAt
                   # on the PodTemplate → K8s does an orderly rolling restart.
                   # On each pod's boot, the bootstrap initContainer fetches

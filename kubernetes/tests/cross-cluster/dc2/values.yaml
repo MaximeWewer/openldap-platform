@@ -1,4 +1,4 @@
-# dc2 — joining cluster. serverIdBase=10 (IDs 10, 11 for its 2 pods).
+# dc2 - joining cluster. serverIdBase=10 (IDs 10, 11 for its 2 pods).
 # Does NOT seed base data; pulls the full tree from dc1 via syncrepl.
 openldap:
   mode: multi-master
@@ -13,7 +13,7 @@ openldap:
 
   replication:
     serverIdBase: 10
-    seedOnOrdinalZeroOnly: false          # DO NOT re-seed — pull from dc1
+    seedOnOrdinalZeroOnly: false          # DO NOT re-seed - pull from dc1
     replicator:
       existingSecret: openldap-replicator-shared
     externalPeers:

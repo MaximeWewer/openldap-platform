@@ -74,7 +74,7 @@ Keyphrase Secret name.
 {{- end -}}
 
 {{/*
-persistedValue — same lookup+fallback pattern as elsewhere.
+persistedValue - same lookup+fallback pattern as elsewhere.
 */}}
 {{- define "ssp.persistedValue" -}}
 {{- $ctx := .context -}}

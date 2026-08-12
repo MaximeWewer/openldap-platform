@@ -1,8 +1,8 @@
-# HA Active-Active — N-way Multi-Master
+# HA Active-Active - N-way Multi-Master
 
 OpenLDAP cluster where **every node accepts writes**. Replication is delta-syncrepl mesh: each peer pulls from each other peer's accesslog. Writes converge via `entryCSN` (timestamp + serverID).
 
-> See [OpenLDAP Admin Guide — Replication](https://www.openldap.org/doc/admin26/replication.html).
+> See [OpenLDAP Admin Guide - Replication](https://www.openldap.org/doc/admin26/replication.html).
 
 ## Topology (3 nodes)
 
@@ -32,7 +32,7 @@ flowchart LR
 - `olcMirrorMode: TRUE` on every node
 - Conflicts resolved by `entryCSN`. Apps requiring strict ordering should route writes to a single node.
 
-## Quick start (Vagrant — 3 VMs)
+## Quick start (Vagrant - 3 VMs)
 
 The 3-VM test cluster lives under [`tests/`](tests/):
 
@@ -61,7 +61,7 @@ cp .env.example .env
 ./setup-node.sh
 ```
 
-Always start node 1 first — peers need it to load the initial dataset.
+Always start node 1 first - peers need it to load the initial dataset.
 
 ## Per-VM ports
 
@@ -95,15 +95,15 @@ Test scaffolding (under `tests/`):
 | `tests/test-replication.sh` | Write probe + cross-peer convergence check |
 | `tests/distribute-ca.sh` | Bootstrap shared CA on ldap1, distribute to ldap2+ldap3, generate per-node certs |
 
-Generated (git-ignored): `docker-compose.override.yml` — emitted by `setup-node.sh` only when `REPLICATE_CONFIG=true`, to pin slapd's listeners (see below).
+Generated (git-ignored): `docker-compose.override.yml` - emitted by `setup-node.sh` only when `REPLICATE_CONFIG=true`, to pin slapd's listeners (see below).
 
 Local data: `init-ldifs/replicator.ldif` (HA-only service account).
-Local TLS material: `certs.sh` + `certs/` (idempotent renewal — see root README for cron). Backup dumps: `backup/`. Pulls from `../base-ldifs/` (shared directory data).
+Local TLS material: `certs.sh` + `certs/` (idempotent renewal - see root README for cron). Backup dumps: `backup/`. Pulls from `../base-ldifs/` (shared directory data).
 
 ## Replicating `cn=config` (optional)
 
 By default only `dc=example,dc=org` replicates. Everything that lives in
-`cn=config` — `olcAccess` rules, overlays, schema, ppolicy, indices — stays on
+`cn=config` - `olcAccess` rules, overlays, schema, ppolicy, indices - stays on
 the node that received the write, so an ACL added on node 1 is invisible to
 nodes 2 and 3.
 
@@ -113,12 +113,12 @@ Set `REPLICATE_CONFIG=true` (same value, same `CONFIG_ADMIN_PASSWORD`, on
 - switches `olcServerID` to the URL form, identical on all nodes. Mandatory:
   the `cn=config` entry itself replicates, so a single-int `olcServerID: N`
   would be overwritten by whichever peer wrote last;
-- adds a `syncprov` overlay on `olcDatabase={0}config` — without a provider
+- adds a `syncprov` overlay on `olcDatabase={0}config` - without a provider
   overlay the config DB serves no sync context and consumers stall forever;
 - adds one plain `refreshAndPersist` `olcSyncRepl` per peer (rid 101+). Not
   delta-syncrepl: the accesslog overlay is attached to `{1}mdb` only, so the
   config DB has no changelog to pull from;
-- binds as `cn=adminconfig,cn=config`, the config rootDN — a rootDN bind
+- binds as `cn=adminconfig,cn=config`, the config rootDN - a rootDN bind
   bypasses the `{0}config` ACL, which otherwise denies every other DN;
 - writes `docker-compose.override.yml` switching the openldap container to
   **`network_mode: host`** and pinning slapd's listeners to
@@ -126,12 +126,12 @@ Set `REPLICATE_CONFIG=true` (same value, same `CONFIG_ADMIN_PASSWORD`, on
 
 Those last two points are one mechanism, not two. slapd only accepts the URL
 form of `olcServerID` if one of the listed URLs matches one of its own
-listeners — and that same match is what makes slapd **drop the syncrepl entry
+listeners - and that same match is what makes slapd **drop the syncrepl entry
 pointing at itself**. Without it, every node consumes its own `cn=config`,
 syncprov answers its own consumer thread with `(53) Server is unwilling to
 perform`, and that poisons the provider session for the real consumers: their
 data replication stalls indefinitely. The URL has to be the docker **host**
-address, which a bridge-networked container cannot bind — hence host
+address, which a bridge-networked container cannot bind - hence host
 networking. The override also resets `networks`, `ports` and `hostname`, which
 compose (or older Docker Engines) reject alongside `network_mode: host`.
 
@@ -140,13 +140,13 @@ compose (or older Docker Engines) reject alongside `network_mode: host`.
 > -d 64`), so a `command:` would be *appended* to it and slapd would abort with
 > a usage dump on the extra positional argument. Only `-h` is changed.
 
-> One `olcSyncRepl` per peer over the **whole** `cn=config` — never several
+> One `olcSyncRepl` per peer over the **whole** `cn=config` - never several
 > with narrower `searchbase`. Syncrepl entries on the same database share a
 > single `contextCSN`: one advancing it makes the others believe they are
 > current, and the consumer silently keeps stale entries while reporting an
 > up-to-date `contextCSN`.
 
-Verify after convergence — the same ACL must be visible from every node:
+Verify after convergence - the same ACL must be visible from every node:
 
 ```bash
 for h in 192.168.58.10 192.168.58.11 192.168.58.12; do
@@ -158,4 +158,4 @@ done
 
 ## Database sizing (per node)
 
-Each node has its **own** `cn=accesslog` DB — not replicated, fed by the local accesslog overlay. The default `olcDbMaxSize: 1 GiB` will saturate fast under high bind volume, causing `MDB_MAP_FULL` and cascading bind failures (ppolicy can't update its counters). Tune `olcAccessLogOps` / `olcAccessLogSuccess` / `olcAccessLogPurge` **on every node**, and live-resize `olcDbMaxSize` if needed (no restart required). See [root README — Database storage & sizing](../README.md#database-storage--sizing) for the full procedure and monitoring queries.
+Each node has its **own** `cn=accesslog` DB - not replicated, fed by the local accesslog overlay. The default `olcDbMaxSize: 1 GiB` will saturate fast under high bind volume, causing `MDB_MAP_FULL` and cascading bind failures (ppolicy can't update its counters). Tune `olcAccessLogOps` / `olcAccessLogSuccess` / `olcAccessLogPurge` **on every node**, and live-resize `olcDbMaxSize` if needed (no restart required). See [root README - Database storage & sizing](../README.md#database-storage--sizing) for the full procedure and monitoring queries.

@@ -1,5 +1,5 @@
 {{- /*
-extraDeploy — arbitrary Kubernetes manifests emitted verbatim by the
+extraDeploy - arbitrary Kubernetes manifests emitted verbatim by the
 chart. Each list entry is treated as a full object and rendered
 between two `---` separators. Use for release-scoped ancillary resources
 (ExternalSecrets, PriorityClasses, sidecar ConfigMaps, extra Ingresses…).

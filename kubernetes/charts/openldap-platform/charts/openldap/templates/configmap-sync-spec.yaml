@@ -1,5 +1,5 @@
 {{- /*
-Declarative spec consumed by the sync scripts — one JSON blob per resource.
+Declarative spec consumed by the sync scripts - one JSON blob per resource.
 Regenerated on every helm upgrade so the sync Jobs always see the current
 values.yaml. Checksums on the sync Job pods force re-run when the spec
 changes.

@@ -1,6 +1,6 @@
 {{- if .Values.hpa.enabled -}}
 {{- if ne .Values.mode "multi-master" -}}
-{{- fail (printf "openldap.hpa.enabled=true requires mode=multi-master (got %q). Autoscaling on standalone/mirror is meaningless — their replicaCount is fixed by design." .Values.mode) -}}
+{{- fail (printf "openldap.hpa.enabled=true requires mode=multi-master (got %q). Autoscaling on standalone/mirror is meaningless - their replicaCount is fixed by design." .Values.mode) -}}
 {{- end -}}
 {{- $fullName := include "openldap.fullname" . -}}
 apiVersion: autoscaling/v2

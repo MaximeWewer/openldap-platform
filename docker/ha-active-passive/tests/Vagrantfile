@@ -1,7 +1,7 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 #
-# OpenLDAP HA — Active-Passive (MirrorMode + 1 read-only consumer) — 3 VMs
+# OpenLDAP HA - Active-Passive (MirrorMode + 1 read-only consumer) - 3 VMs
 #
 #   vagrant up                  # boot cluster
 #   vagrant ssh ldap1           # shell into active master

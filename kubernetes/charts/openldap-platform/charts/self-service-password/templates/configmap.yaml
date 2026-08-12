@@ -1,5 +1,5 @@
 {{- /*
-config.inc.local.php — dropped into /var/www/conf on the SSP image.
+config.inc.local.php - dropped into /var/www/conf on the SSP image.
 Bind password + keyphrase + SMTP password are NOT embedded here; the
 Deployment templates them into PHP variables via env-var-driven includes
 (config.inc.local.php reads them with getenv()).
@@ -14,7 +14,7 @@ metadata:
 data:
   config.inc.local.php: |
     <?php
-    # Managed by Helm — do not edit by hand.
+    # Managed by Helm - do not edit by hand.
 
     # ---------------------------------------------------------------------------
     # LDAP connection

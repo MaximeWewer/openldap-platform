@@ -1,6 +1,6 @@
 {{/*
 TLS scripts shared between the pre-install hook (init Job) and the regular
-CronJob (renewal). Body only — the callers wrap it into their own ConfigMaps.
+CronJob (renewal). Body only - the callers wrap it into their own ConfigMaps.
 
   {{ include "openldap.tlsScript.common" . }}
   {{ include "openldap.tlsScript.init"   . }}
@@ -84,7 +84,7 @@ set -eu
 
 mkdir -p /tls
 if kubectl -n "${RELEASE_NAMESPACE}" get secret "${TLS_SECRET_NAME}" >/dev/null 2>&1; then
-  LOG "Secret ${TLS_SECRET_NAME} already exists — nothing to do"
+  LOG "Secret ${TLS_SECRET_NAME} already exists - nothing to do"
   exit 0
 fi
 
@@ -110,7 +110,7 @@ set -eu
 : "${RENEW_THRESHOLD_DAYS:?}"; : "${STS_NAME:?}"
 
 if ! kubectl -n "${RELEASE_NAMESPACE}" get secret "${TLS_SECRET_NAME}" >/dev/null 2>&1; then
-  DIE "Secret ${TLS_SECRET_NAME} missing — run init.sh first"
+  DIE "Secret ${TLS_SECRET_NAME} missing - run init.sh first"
 fi
 
 mkdir -p /tls
@@ -124,7 +124,7 @@ THRESHOLD_SECS=$(( RENEW_THRESHOLD_DAYS * 86400 ))
 NEED_RENEW=0
 
 if ! openssl x509 -in /tls/tls.crt -checkend "${THRESHOLD_SECS}" -noout; then
-  LOG "server cert expires within ${RENEW_THRESHOLD_DAYS}d — regenerating"
+  LOG "server cert expires within ${RENEW_THRESHOLD_DAYS}d - regenerating"
   gen_server_cert
   NEED_RENEW=1
 else
@@ -132,7 +132,7 @@ else
 fi
 
 if ! openssl x509 -in /tls/ca.crt -checkend "${THRESHOLD_SECS}" -noout; then
-  LOG "CA expires within ${RENEW_THRESHOLD_DAYS}d — regenerating CA + server cert"
+  LOG "CA expires within ${RENEW_THRESHOLD_DAYS}d - regenerating CA + server cert"
   openssl genrsa -out /tls/ca.key 4096
   openssl req -x509 -new -nodes -key /tls/ca.key -sha256 \
     -days "${CA_DAYS}" -out /tls/ca.crt \

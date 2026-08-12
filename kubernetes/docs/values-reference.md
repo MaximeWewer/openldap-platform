@@ -1,7 +1,7 @@
 # Values reference
 
 Auto-generated exhaustive tables (one per chart) via
-[helm-docs](https://github.com/norwoodj/helm-docs) — every knob with its
+[helm-docs](https://github.com/norwoodj/helm-docs) - every knob with its
 current default, straight out of the chart's `values.yaml`:
 
 - Umbrella: [`openldap-platform/README.md`](../charts/openldap-platform/README.md)
@@ -23,14 +23,14 @@ so the umbrella README ships a single table covering the whole stack
 (~430 rows). Per-subchart READMEs cover the same knobs at their own
 altitude and are useful when the subchart is installed standalone.
 
-Description column is blank for freeform comments — helm-docs picks up
+Description column is blank for freeform comments - helm-docs picks up
 the ones prefixed with `# -- <description>` on the line above each key.
 Convert commentary progressively as knobs stabilise.
 
 Each chart carries a `README.md.gotmpl` template with the chart's own
 custom sections (TL;DR, docs pointers) plus the standard helm-docs
 placeholders (`chart.header`, `chart.valuesSection`, …). Regenerating is
-non-destructive — the .gotmpl is the source of truth.
+non-destructive - the .gotmpl is the source of truth.
 
 ## Most-tuned values (curated)
 
@@ -51,13 +51,13 @@ Starting overlay if you want to skim before opening the full tables.
 | `openldap.accesslog.ops` | `writes bind` | Drop `bind` for high-traffic setups |
 | `openldap.replication.serverIdBase` | `1` | Distinct per cluster in cross-cluster HA |
 | `openldap.replication.externalPeers` | `[]` | Cross-cluster LDAPS URIs |
-| `openldap.replication.replicateConfig.enabled` | `false` | Replicate `cn=config` (ACLs, overlays, schema, ppolicy) between writable pods. Switches `olcServerID` to the URL form and pins slapd's `-h`. In-cluster peers only — never `externalPeers`. Read-only replicas get the `cn=schema` subtree only (prevents their syncrepl stalling on a runtime schema addition) |
-| `openldap.hpa.enabled` | `false` | HorizontalPodAutoscaler v2 — requires `mode: multi-master` |
+| `openldap.replication.replicateConfig.enabled` | `false` | Replicate `cn=config` (ACLs, overlays, schema, ppolicy) between writable pods. Switches `olcServerID` to the URL form and pins slapd's `-h`. In-cluster peers only - never `externalPeers`. Read-only replicas get the `cn=schema` subtree only (prevents their syncrepl stalling on a runtime schema addition) |
+| `openldap.hpa.enabled` | `false` | HorizontalPodAutoscaler v2 - requires `mode: multi-master` |
 | `openldap.hpa.minReplicas` / `maxReplicas` | `2` / `5` | HPA scale window |
 | `openldap.hpa.metrics` | CPU 70% + mem 80% | autoscaling/v2 metrics[] verbatim; supports Prometheus-adapter |
 | `openldap.scaleSchedule` | `[]` | Cron CronJobs that patch HPA min/max at scheduled times |
 | `openldap.scaleWatcher.pollIntervalSeconds` | `10` | Scale-watcher STS poll interval (auto-emitted with hpa / scaleSchedule) |
-| `openldap.replication.startTLS` | `""` | `""` \| `"yes"` \| `"critical"` — quote to avoid YAML bool |
+| `openldap.replication.startTLS` | `""` | `""` \| `"yes"` \| `"critical"` - quote to avoid YAML bool |
 | `openldap.customSchemas.files` | `{}` | Inline extra schema LDIFs |
 | `openldap.customLdifs.files` | `{}` | Inline extra data LDIFs (rendered via tpl) |
 | `openldap.customAcls` | `[]` | REPLACE default ACLs (list of directives) |
@@ -69,12 +69,12 @@ Starting overlay if you want to skim before opening the full tables.
 | `openldap.backup.enabled` | `false` | Daily CronJob, PVC-backed |
 | `openldap.monitoring.enabled` | `false` | Sidecar exporter + optional SM/PR |
 | `openldap.networkPolicy.enabled` | `false` | Default-deny + explicit allows |
-| `openldap.podAntiAffinityPreset` | `""` | `""` \| `soft` \| `hard` — spread across nodes |
+| `openldap.podAntiAffinityPreset` | `""` | `""` \| `soft` \| `hard` - spread across nodes |
 | `openldap.podDisruptionBudget.enabled` | `auto` | Enabled iff HA |
 | `openldap.users` | `[]` | Declarative user list (sync Job reconciles) |
 | `openldap.groups` | `[]` | Declarative group list |
 | `openldap.policies` | `[]` | Declarative ppolicy templates |
 | `openldap.onUserRemove` | `delete` | `delete` \| `lock` |
-| `openldap.existingBootstrapConfigMap` | `""` | Escape hatch — full bootstrap CM override |
+| `openldap.existingBootstrapConfigMap` | `""` | Escape hatch - full bootstrap CM override |
 | `phpldapadmin.enabled` | `false` | UI subchart |
 | `self-service-password.enabled` | `false` | End-user password UI |

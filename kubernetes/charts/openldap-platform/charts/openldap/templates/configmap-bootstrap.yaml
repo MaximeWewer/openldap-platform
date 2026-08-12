@@ -1,12 +1,12 @@
 {{- /*
-Bootstrap ConfigMap — holds:
-  * bootstrap.sh          — initContainer entrypoint (idempotent, mode-aware).
+Bootstrap ConfigMap - holds:
+  * bootstrap.sh          - initContainer entrypoint (idempotent, mode-aware).
                             Standalone: seed cn=config + base data.
                             Mirror / multi-master: same, plus per-pod
                             olcServerID, olcMirrorMode: TRUE, syncrepl entries
                             towards every in-cluster peer + externalPeers, and
                             a replicator service account added to the tree.
-  * slapd-config.ldif     — cn=config seed, Helm-templated for values-driven
+  * slapd-config.ldif     - cn=config seed, Helm-templated for values-driven
                             knobs. Runtime placeholders substituted by
                             bootstrap.sh:
                               __ADMIN_PW_HASH__        (data admin)
@@ -19,12 +19,12 @@ Bootstrap ConfigMap — holds:
                               __CONFIG_SYNCREPL_BLOCK__
                               __CONFIG_MIRRORMODE_LINE__
                               __CONFIG_SYNCPROV_BLOCK__
-  * base-data.ldif        — dc=<suffix> + OUs + (HA) replicator service
+  * base-data.ldif        - dc=<suffix> + OUs + (HA) replicator service
                             account. Loaded on ordinal 0 only when HA and
                             replication.seedOnOrdinalZeroOnly=true (default).
 */ -}}
 {{- if .Values.existingBootstrapConfigMap -}}
-# Chart-managed bootstrap ConfigMap skipped — using existingBootstrapConfigMap: {{ .Values.existingBootstrapConfigMap }}
+# Chart-managed bootstrap ConfigMap skipped - using existingBootstrapConfigMap: {{ .Values.existingBootstrapConfigMap }}
 {{- else -}}
 {{- $ha := ne .Values.mode "standalone" -}}
 apiVersion: v1
@@ -46,7 +46,7 @@ data:
     OK_MARKER="${SLAPD_D}/.bootstrap-ok"
     TOPO_HASH_FILE="${SLAPD_D}/.topology-hash"
 
-    # Alpine base image — install slapd tools (idempotent, no-op if cached).
+    # Alpine base image - install slapd tools (idempotent, no-op if cached).
     if ! command -v slapadd >/dev/null 2>&1; then
       echo "[bootstrap] Installing packages: ${APK_PACKAGES}"
       apk add --no-cache ${APK_PACKAGES} >/dev/null
@@ -62,7 +62,7 @@ data:
     # For mode=multi-master, resolve REPLICA_COUNT from the LIVE StatefulSet
     # spec at boot rather than trusting the env var (which is baked from
     # .Values.replicaCount at helm render time). This lets HPA-driven scale
-    # events propagate to every pod's cn=config peer list — new pods created
+    # events propagate to every pod's cn=config peer list - new pods created
     # by an HPA scale-up see the correct count, existing pods restarted by
     # the scale-watcher recompute their topology hash against the live value.
     # Falls back to the env value if the API call fails.
@@ -83,16 +83,16 @@ data:
           2>/dev/null | jq -r '.spec.replicas // empty' 2>/dev/null)
         if [ -n "${LIVE_REPLICAS}" ] && [ "${LIVE_REPLICAS}" -gt 0 ] 2>/dev/null; then
           if [ "${LIVE_REPLICAS}" != "${REPLICA_COUNT:-}" ]; then
-            echo "[bootstrap] REPLICA_COUNT env=${REPLICA_COUNT:-?} — using live STS spec.replicas=${LIVE_REPLICAS}"
+            echo "[bootstrap] REPLICA_COUNT env=${REPLICA_COUNT:-?} - using live STS spec.replicas=${LIVE_REPLICAS}"
           else
-            echo "[bootstrap] Live STS spec.replicas=${LIVE_REPLICAS} matches env — OK"
+            echo "[bootstrap] Live STS spec.replicas=${LIVE_REPLICAS} matches env - OK"
           fi
           REPLICA_COUNT="${LIVE_REPLICAS}"
         else
-          echo "[bootstrap] Live STS query failed — falling back to REPLICA_COUNT env=${REPLICA_COUNT:-1}"
+          echo "[bootstrap] Live STS query failed - falling back to REPLICA_COUNT env=${REPLICA_COUNT:-1}"
         fi
       else
-        echo "[bootstrap] No SA token at ${SA_DIR}/token — falling back to REPLICA_COUNT env=${REPLICA_COUNT:-1}"
+        echo "[bootstrap] No SA token at ${SA_DIR}/token - falling back to REPLICA_COUNT env=${REPLICA_COUNT:-1}"
       fi
     fi
 
@@ -100,7 +100,7 @@ data:
     # of these changes across upgrades, the pod restarts (checksum/topology
     # annotation on the PodTemplateSpec) and this script wipes slapd.d to
     # regenerate cn=config against the new inputs. Data (${MDB_DIR}) is left
-    # untouched — the mdb DB survives; only the config DB is rebuilt.
+    # untouched - the mdb DB survives; only the config DB is rebuilt.
     DESIRED_TOPO_HASH=$(printf '%s\n' \
       "${MODE:-standalone}" \
       "${NODE_ROLE:-writable}" \
@@ -116,7 +116,7 @@ data:
     if [ -f "${OK_MARKER}" ]; then
       CURRENT_TOPO_HASH=$(cat "${TOPO_HASH_FILE}" 2>/dev/null || echo "")
       if [ "${CURRENT_TOPO_HASH}" = "${DESIRED_TOPO_HASH}" ]; then
-        echo "[bootstrap] Marker present + topology unchanged — skipping."
+        echo "[bootstrap] Marker present + topology unchanged - skipping."
         chown -R "${OWNER}" "${SLAPD_D}" "${MDB_DIR}" "${ACCESSLOG_DIR}"
         exit 0
       fi
@@ -127,7 +127,7 @@ data:
     fi
 
     if [ -d "${SLAPD_D}" ] && [ -n "$(ls -A ${SLAPD_D} 2>/dev/null)" ]; then
-      echo "[bootstrap] Partial state detected (no success marker) — wiping and restarting."
+      echo "[bootstrap] Partial state detected (no success marker) - wiping and restarting."
       # A partial FIRST bootstrap needs a full wipe (data too). Reconcile mode
       # already handled its own wipe above and NEVER hits this branch.
       rm -rf "${SLAPD_D}"/* "${MDB_DIR}"/* "${ACCESSLOG_DIR}"/* 2>/dev/null || true
@@ -169,7 +169,7 @@ data:
       REPLICATOR_HASH=$(slappasswd -s "$REPLICATOR_PW")
 
       # Read-only consumer pods use a distinct serverIdBase and never accept
-      # writes — olcReadOnly: TRUE substitutes olcMirrorMode.
+      # writes - olcReadOnly: TRUE substitutes olcMirrorMode.
       SERVER_ID_FILE=$(mktemp)
       if [ "${NODE_ROLE:-writable}" = "readonly" ]; then
         SERVER_ID=$((${READONLY_SERVER_ID_BASE:-100} + ORDINAL))
@@ -186,7 +186,7 @@ data:
           # whole cn=config replicates, root entry included: a single-int
           # olcServerID would be overwritten by whichever peer wrote last.
           # Each pod picks its own line by matching the URL against one of its
-          # listeners — which is why the StatefulSet pins slapd's `-h` to this
+          # listeners - which is why the StatefulSet pins slapd's `-h` to this
           # FQDN instead of `ldap:///` (0.0.0.0 never matches a host-specific
           # URL). It is ALSO what makes slapd drop the syncrepl entry pointing
           # at itself (provider URL == own identity URL). Without that match a
@@ -260,7 +260,7 @@ data:
       # ONE syncrepl per peer over the WHOLE cn=config. Not several partial
       # ones with narrower searchbases: syncrepl entries on the same database
       # share a single contextCSN, so one advancing it makes the others believe
-      # they are current and silently skip changes — measured, the consumer
+      # they are current and silently skip changes - measured, the consumer
       # reports an up-to-date contextCSN while its entries are stale.
       # Self IS listed: the list must be identical on every pod (it replicates
       # too), and slapd drops the self entry at runtime by matching the
@@ -302,7 +302,7 @@ data:
     olcSpSessionLog: ${CONFIG_SYNCPROV_SESSIONLOG}
 
     EOF
-        echo "[bootstrap] cn=config replication ON — $((RID - 101)) providers, URL-form serverID"
+        echo "[bootstrap] cn=config replication ON - $((RID - 101)) providers, URL-form serverID"
         if [ -n "${EXTERNAL_PEERS:-}" ]; then
           echo "[bootstrap] NOTE: externalPeers are excluded from cn=config replication by design"
         fi
@@ -313,11 +313,11 @@ data:
       # writable pool's olcMirrorMode/olcServerID and stop being read-only.
       # But it MUST track the schema: its syncrepl runs with schemachecking=on,
       # so an entry using an objectClass added at runtime on the writable pool
-      # is rejected — and that rejection STALLS the whole replication stream,
+      # is rejected - and that rejection STALLS the whole replication stream,
       # silently, including every later entry.
       #
       # So: replicate the cn=schema subtree ONLY. No olcMirrorMode and no
-      # syncprov are added, which leaves {0}config a pure shadow here — local
+      # syncprov are added, which leaves {0}config a pure shadow here - local
       # cn=config writes are refused on a RO pod, which is what we want.
       # olcServerID stays in the single-int form: the `cn=config` root entry is
       # outside this searchbase, so nothing overwrites it.
@@ -344,7 +344,7 @@ data:
           RID=$((RID + 1))
           i=$((i + 1))
         done
-        echo "[bootstrap] cn=schema replication ON (read-only consumer) — $((RID - 201)) providers"
+        echo "[bootstrap] cn=schema replication ON (read-only consumer) - $((RID - 201)) providers"
       fi
     fi
 
@@ -355,7 +355,7 @@ data:
     RENDERED_DATA=$(mktemp)
     trap 'rm -f "${RENDERED_CONFIG}" "${RENDERED_DATA}" "${SYNCREPL_FILE:-}" "${SERVER_ID_FILE:-}" "${CONFIG_SYNCREPL_FILE:-}" "${CONFIG_SYNCPROV_FILE:-}"' EXIT
 
-    # Build a sed script file — safer than shell word-splitting when
+    # Build a sed script file - safer than shell word-splitting when
     # substitution values contain spaces (e.g. "olcMirrorMode: TRUE").
     SED_SCRIPT=$(mktemp)
     {
@@ -386,7 +386,7 @@ data:
     ' /bootstrap/slapd-config.ldif | sed -f "${SED_SCRIPT}" > "${RENDERED_CONFIG}"
     rm -f "${SED_SCRIPT}"
 
-    # Custom schemas — append `include:` lines to the cn=schema block right
+    # Custom schemas - append `include:` lines to the cn=schema block right
     # before slapadd. Files come from /custom-schemas (projected volume
     # combining the chart-managed ConfigMap and any user existingConfigMap).
     if [ -d /custom-schemas ]; then
@@ -416,8 +416,8 @@ data:
 
     # Base data: standalone always, HA only on ordinal 0 (default) so peers
     # sync from ordinal 0 instead of concurrently seeding split-brain state.
-    # Read-only pods NEVER seed — they only pull from writable peers.
-    # Reconcile mode NEVER seeds — data is already in ${MDB_DIR}, we only
+    # Read-only pods NEVER seed - they only pull from writable peers.
+    # Reconcile mode NEVER seeds - data is already in ${MDB_DIR}, we only
     # rebuilt cn=config on top of it.
     SHOULD_SEED_DATA=1
     if [ "${MODE:-standalone}" != "standalone" ] \
@@ -441,7 +441,7 @@ data:
       echo "[bootstrap] Loading base directory data"
       slapadd -n 1 -F "${SLAPD_D}" -l "${RENDERED_DATA}"
 
-      # Custom data LDIFs — same seed pod, alphabetical order, one slapadd
+      # Custom data LDIFs - same seed pod, alphabetical order, one slapadd
       # per file so a bad LDIF only wastes its own file rather than the
       # whole batch. Files come from /custom-ldifs (projected volume).
       if [ -d /custom-ldifs ]; then
@@ -451,23 +451,23 @@ data:
         done
       fi
     else
-      echo "[bootstrap] ordinal=${ORDINAL} — skipping base data seed (will sync from ordinal 0)"
+      echo "[bootstrap] ordinal=${ORDINAL} - skipping base data seed (will sync from ordinal 0)"
     fi
 
     echo "[bootstrap] chown -R ${OWNER}"
     chown -R "${OWNER}" "${SLAPD_D}" "${MDB_DIR}" "${ACCESSLOG_DIR}"
 
-    # Topology hash — written BEFORE the OK marker so a mid-write crash
+    # Topology hash - written BEFORE the OK marker so a mid-write crash
     # forces a re-reconcile on next boot rather than a stale-hash accept.
     printf '%s\n' "${DESIRED_TOPO_HASH}" > "${TOPO_HASH_FILE}"
     chown "${OWNER}" "${TOPO_HASH_FILE}"
 
-    # Success marker — written LAST so a partial bootstrap forces a redo.
+    # Success marker - written LAST so a partial bootstrap forces a redo.
     date -u +%Y-%m-%dT%H:%M:%SZ > "${OK_MARKER}"
     chown "${OWNER}" "${OK_MARKER}"
 
     if [ "${RECONCILE_MODE:-0}" = "1" ]; then
-      echo "[bootstrap] Reconcile done — cn=config rebuilt for the new topology."
+      echo "[bootstrap] Reconcile done - cn=config rebuilt for the new topology."
     fi
     echo "[bootstrap] Done."
 
@@ -551,7 +551,7 @@ data:
     {{- end }}
     olcMonitoring: TRUE
     {{- /*
-      ACL block on {1}mdb — either the user-provided customAcls (full
+      ACL block on {1}mdb - either the user-provided customAcls (full
       replacement) or the chart defaults + any extraAcls (append). Every
       entry is `tpl`-rendered so users can reference values.
     */ -}}

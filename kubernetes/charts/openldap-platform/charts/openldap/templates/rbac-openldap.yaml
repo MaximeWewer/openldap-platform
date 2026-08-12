@@ -1,12 +1,12 @@
 {{- /*
-RBAC for the openldap pod itself — only when mode=multi-master.
+RBAC for the openldap pod itself - only when mode=multi-master.
 The initContainer needs `statefulsets/get` to fetch the live spec.replicas
 at boot (Fix A of the full-auto scaling path), so pods created by an HPA
 scale event see the correct REPLICA_COUNT even though .Values.replicaCount
 never changed. Without this, HPA-driven pods bootstrap against the
 render-time replica count and misconfigure syncrepl.
 
-Standalone / mirror don't need this — replicaCount is fixed at 1 or 2.
+Standalone / mirror don't need this - replicaCount is fixed at 1 or 2.
 */}}
 {{- if eq .Values.mode "multi-master" -}}
 {{- $fullName := include "openldap.fullname" . -}}

@@ -4,14 +4,14 @@
 # Renewal policy:
 #   --force                       : regen LDAP cert unconditionally
 #   --renew-threshold-days N      : regen LDAP cert if expires within N days (default: 30)
-#   --regen-ca                    : regen the CA too (rare — invalidates server cert)
+#   --regen-ca                    : regen the CA too (rare - invalidates server cert)
 #
 # Multi-node (HA): the CA must be SHARED across all peers so clients only trust one CA
 # and HAProxy failover doesn't cause cert mismatch. Workflow:
-#   1. On the CA master (e.g. node 1): run certs.sh once — it creates the CA + own cert.
+#   1. On the CA master (e.g. node 1): run certs.sh once - it creates the CA + own cert.
 #   2. Copy openldapCA.crt + openldapCA.key to each peer's certs/ (manual scp or
 #      tests/distribute-ca.sh for the Vagrant cluster).
-#   3. On each peer: run certs.sh — it detects the existing CA and ONLY generates a
+#   3. On each peer: run certs.sh - it detects the existing CA and ONLY generates a
 #      per-node server cert (signed by that CA), with the per-node SAN you pass.
 #   --ca-from PATH                : copy openldapCA.crt + openldapCA.key from PATH into
 #                                   local certs/ before generating (PATH is a local dir).
@@ -19,7 +19,7 @@
 # Container handling:
 #   --restart                     : if cert was renewed, restart the openldap container
 #   slapd reads TLS material at startup, so a restart is required to pick up new files.
-#   HAProxy in HA modes is TCP passthrough (no TLS termination) — no restart needed.
+#   HAProxy in HA modes is TCP passthrough (no TLS termination) - no restart needed.
 #
 # Output:
 #   --quiet                       : suppress non-action output (good for cron MAILTO)
@@ -49,7 +49,7 @@ Usage: $0 [options]
 Options:
   --force                        regen LDAP cert unconditionally
   --renew-threshold-days N       regen LDAP cert if expires within N days (default: $RENEW_THRESHOLD_DAYS)
-  --regen-ca                     regen the CA too (rare — invalidates server cert)
+  --regen-ca                     regen the CA too (rare - invalidates server cert)
   --restart                      restart the openldap container if a cert was renewed
   --quiet                        suppress non-action output (good for cron)
   --cn NAME                      Common Name for LDAP cert (default: $CN)
@@ -99,7 +99,7 @@ if [[ -n "$CA_FROM" ]]; then
     exit 1
   fi
   if [[ -f "$CA_CERT_PATH" ]] && cmp -s "$CA_FROM/openldapCA.crt" "$CA_CERT_PATH"; then
-    log "CA already in sync with $CA_FROM — no copy."
+    log "CA already in sync with $CA_FROM - no copy."
   else
     action "Importing CA from $CA_FROM ..."
     cp "$CA_FROM/openldapCA.crt" "$CA_CERT_PATH"
@@ -162,7 +162,7 @@ EOF
   RENEWED="yes"
 else
   EXPIRY=$(openssl x509 -in "$LDAP_CRT_PATH" -enddate -noout | cut -d= -f2)
-  log "LDAP certificate still valid (notAfter: $EXPIRY) — no action."
+  log "LDAP certificate still valid (notAfter: $EXPIRY) - no action."
 fi
 
 # === Permissions for the openldap container (uid 101, gid 102) ===
@@ -188,7 +188,7 @@ if [[ "$RENEWED" == "yes" ]]; then
       docker restart "$CONTAINER_NAME" >/dev/null
       action "Container '$CONTAINER_NAME' restarted."
     else
-      action "Container '$CONTAINER_NAME' not running — skip restart."
+      action "Container '$CONTAINER_NAME' not running - skip restart."
     fi
   else
     log "Note: slapd loads TLS at startup. Restart '$CONTAINER_NAME' to apply the new cert (or rerun with --restart)."

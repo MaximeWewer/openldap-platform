@@ -1,6 +1,6 @@
 #!/bin/bash
 # Provision a Vagrant VM with docker + kubectl + helm + minikube, then start
-# a single-node minikube cluster. Idempotent — safe to re-run via `vagrant
+# a single-node minikube cluster. Idempotent - safe to re-run via `vagrant
 # provision`.
 set -euo pipefail
 
@@ -68,7 +68,7 @@ if ! command -v minikube >/dev/null 2>&1 || \
 fi
 
 # ---------------------------------------------------------------------------
-# openldap-cli — used by the test scripts to bind/search from the host.
+# openldap-cli - used by the test scripts to bind/search from the host.
 # ---------------------------------------------------------------------------
 CLI_VERSION="${CLI_VERSION:-v2026.7.2}"
 if ! command -v openldap-cli >/dev/null 2>&1 || \
@@ -79,18 +79,18 @@ if ! command -v openldap-cli >/dev/null 2>&1 || \
 fi
 
 # ---------------------------------------------------------------------------
-# ldap-utils — for ldapsearch/ldapadd probes.
+# ldap-utils - for ldapsearch/ldapadd probes.
 # ---------------------------------------------------------------------------
 apt-get -o DPkg::Lock::Timeout=600 install -yq ldap-utils
 
 # ---------------------------------------------------------------------------
-# minikube — start (as vagrant user, docker driver).
+# minikube - start (as vagrant user, docker driver).
 # The `apiserver-ips` extra IP is critical: without it the apiserver's
 # TLS cert doesn't cover the VM's private_network address and kubectl
 # from the OTHER VM (or the host) can't reach it. We don't need
 # cross-cluster kubectl access here, but keep the flag for future use.
 # ---------------------------------------------------------------------------
-# Compute resources OUTSIDE the heredoc — dodges locale-sensitive parsing
+# Compute resources OUTSIDE the heredoc - dodges locale-sensitive parsing
 # of `free -m`. /proc/meminfo is always English + numeric.
 CPU_COUNT="$(nproc)"
 MEM_MB="$(awk '/^MemTotal:/{print int($2/1024) - 1024}' /proc/meminfo)"
@@ -118,4 +118,4 @@ EOF
 mkdir -p /root/.kube
 cp /home/vagrant/.kube/config /root/.kube/config
 
-echo "=== [${NODE_NAME:-?}] ready — apiserver on \$(minikube -p minikube ip) ==="
+echo "=== [${NODE_NAME:-?}] ready - apiserver on \$(minikube -p minikube ip) ==="

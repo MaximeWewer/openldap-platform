@@ -30,7 +30,7 @@ metadata:
     checksum/scripts: {{ include (print $ctx.Template.BasePath "/configmap-sync-scripts.yaml") $ctx | sha256sum }}
     checksum/spec: {{ include (print $ctx.Template.BasePath "/configmap-sync-spec.yaml") $ctx | sha256sum }}
 spec:
-  # Bounded retries — LDAP not-yet-ready is handled inside common.sh's
+  # Bounded retries - LDAP not-yet-ready is handled inside common.sh's
   # wait_for_ldap, so a Job failure is a real error and shouldn't loop.
   backoffLimit: 2
   ttlSecondsAfterFinished: 3600

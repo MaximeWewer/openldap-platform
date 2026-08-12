@@ -2,7 +2,7 @@
 
 A production-oriented Helm chart to deploy an **[OpenLDAP](https://openldap.org/)** server along with **[phpLDAPadmin](https://github.com/leenooks/phpLDAPadmin)** and **[Self Service Password](https://github.com/ltb-project/self-service-password)** on Kubernetes. Built on the minimal [cleanstart/openldap](https://hub.docker.com/r/cleanstart/openldap) image (OpenLDAP 2.6).
 
-Day-to-day directory administration is handled by the companion CLI **[openldap-cli](https://github.com/maximewewer/openldap-cli)** — invoked from sync Jobs on `helm upgrade`, and available for ad-hoc use inside the release namespace.
+Day-to-day directory administration is handled by the companion CLI **[openldap-cli](https://github.com/maximewewer/openldap-cli)** - invoked from sync Jobs on `helm upgrade`, and available for ad-hoc use inside the release namespace.
 
 > Running on Docker Compose? See the sibling recipes in [`../docker/`](../docker/).
 
@@ -18,7 +18,7 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
   - [Prerequisites](#prerequisites)
   - [Quick start](#quick-start)
   - [Default credentials](#default-credentials)
-- [Administration — openldap-cli](#administration--openldap-cli)
+- [Administration - openldap-cli](#administration--openldap-cli)
   - [Declarative flow (sync Jobs)](#declarative-flow-sync-jobs)
   - [Ad-hoc CLI use](#ad-hoc-cli-use)
 - [Password rotation](#password-rotation)
@@ -51,17 +51,17 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
 - **Declarative administration**: `openldap.users`, `openldap.groups`, `openldap.policies` reconciled on every `helm upgrade` via post-install Jobs driving `openldap-cli`.
 - **Password Secret backend**: per-user passwords auto-generated, stored in per-user Secrets (never in `values.yaml`), preserved across upgrades via lookup + resource-policy keep.
 - **Three TLS backends**: `cert-manager` Certificate CR, in-cluster `job` (self-signed CA + weekly renew CronJob + rolling restart), or user-`provided` Secret.
-- **Ingress**: `ingress-nginx` SSL passthrough OR Gateway API `TLSRoute` — both for LDAPS.
+- **Ingress**: `ingress-nginx` SSL passthrough OR Gateway API `TLSRoute` - both for LDAPS.
 - **Backup + accesslog purge**: daily `openldap-cli backup` + weekly `openldap-cli ops accesslog-purge` CronJobs.
 - **Prometheus monitoring**: sidecar [openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter) + `ServiceMonitor` + baseline `PrometheusRule`.
 - **Hardened by default**: non-root, drop-all caps, read-only rootfs, seccomp `RuntimeDefault`, auto-PDB in HA, NetworkPolicy scoped to server pods.
 - **Extension points**: `extraEnv`, `extraVolumes`/`Mounts`, `sidecars`, `extraInitContainers`, `extraDeploy` on every subchart.
-- **Custom bootstrap**: `customSchemas.files`/`existingConfigMap`, `customLdifs.files`/`existingConfigMap`, `customAcls` / `extraAcls` — extend the tree without forking.
+- **Custom bootstrap**: `customSchemas.files`/`existingConfigMap`, `customLdifs.files`/`existingConfigMap`, `customAcls` / `extraAcls` - extend the tree without forking.
 - **GitOps-ready**: reference Argo CD + Flux manifests; Helm hooks + `lookup` pattern documented.
 
 ### Architecture
 
-Directory Information Tree (identical to the Docker layouts — same LDIF pipeline):
+Directory Information Tree (identical to the Docker layouts - same LDIF pipeline):
 
 ```mermaid
 graph TD
@@ -72,7 +72,7 @@ graph TD
     root --> pol["ou=policies<br/><i>Password policies</i>"]
 ```
 
-ACL matrix on the main database (`dc=example,dc=org`) — chart defaults, overridable via `customAcls` (replace) or `extraAcls` (append):
+ACL matrix on the main database (`dc=example,dc=org`) - chart defaults, overridable via `customAcls` (replace) or `extraAcls` (append):
 
 | Identity                        | userPassword | subtree (`dc=…`)         | ou=policies |
 | ------------------------------- | ------------ | ------------------------ | ----------- |
@@ -82,7 +82,7 @@ ACL matrix on the main database (`dc=example,dc=org`) — chart defaults, overri
 | authenticated users             | auth (via `by users read`) | read                     | read        |
 | anonymous                       | auth only    | -                        | read        |
 
-Infrastructure databases (`cn=config`, `cn=accesslog`, `cn=Monitor`) — restricted to `cn=adminconfig,cn=config`, plus read for the Prometheus exporter sidecar.
+Infrastructure databases (`cn=config`, `cn=accesslog`, `cn=Monitor`) - restricted to `cn=adminconfig,cn=config`, plus read for the Prometheus exporter sidecar.
 
 Kubernetes topology (writable pool + optional read-only pool):
 
@@ -128,13 +128,13 @@ Full-auto: bumping `openldap.replicaCount` (`helm upgrade`) OR letting the HPA s
 
 Two-part mechanism:
 
-- **Part A** — in multi-master, every pod's bootstrap initContainer fetches the LIVE `StatefulSet.spec.replicas` via the K8s API at boot (env `REPLICA_COUNT` = fallback). Pods created by HPA scale-up therefore configure syncrepl against the current mesh size, not the stale render-time value.
-- **Part B** — a 1-replica `Deployment` `<release>-openldap-scale-watcher` polls `spec.replicas` every 10 s and issues `kubectl rollout restart` on change. This closes the gap for HPA-driven scaling (HPA doesn't touch the PodTemplate hash, so existing pods wouldn't otherwise restart). Auto-emitted with `hpa.enabled` or `scaleSchedule`.
+- **Part A** - in multi-master, every pod's bootstrap initContainer fetches the LIVE `StatefulSet.spec.replicas` via the K8s API at boot (env `REPLICA_COUNT` = fallback). Pods created by HPA scale-up therefore configure syncrepl against the current mesh size, not the stale render-time value.
+- **Part B** - a 1-replica `Deployment` `<release>-openldap-scale-watcher` polls `spec.replicas` every 10 s and issues `kubectl rollout restart` on change. This closes the gap for HPA-driven scaling (HPA doesn't touch the PodTemplate hash, so existing pods wouldn't otherwise restart). Auto-emitted with `hpa.enabled` or `scaleSchedule`.
 
 Optional autoscaling knobs:
 
-- `openldap.hpa.enabled: true` — emits `HorizontalPodAutoscaler` v2 targeting the writable STS. Default = CPU 70% + memory 80%; extend `metrics[]` with Prometheus-adapter-fed custom metrics for LDAP-specific triggers (bind rate, search p99). Chart validates `mode == multi-master`; fails render otherwise.
-- `openldap.scaleSchedule[]` — chart-native cron scaler (no KEDA dep): each entry emits a `CronJob` that runs `kubectl patch hpa` at its schedule to adjust the HPA min/max window. Business-hour ramp-up + off-hour cooldown in ~10 lines of values.
+- `openldap.hpa.enabled: true` - emits `HorizontalPodAutoscaler` v2 targeting the writable STS. Default = CPU 70% + memory 80%; extend `metrics[]` with Prometheus-adapter-fed custom metrics for LDAP-specific triggers (bind rate, search p99). Chart validates `mode == multi-master`; fails render otherwise.
+- `openldap.scaleSchedule[]` - chart-native cron scaler (no KEDA dep): each entry emits a `CronJob` that runs `kubectl patch hpa` at its schedule to adjust the HPA min/max window. Business-hour ramp-up + off-hour cooldown in ~10 lines of values.
 
 Caveat: `helm upgrade` after HPA has scaled will conflict on `spec.replicas` (kube-controller-manager owns that field). Bump `openldap.replicaCount` in values to match the live count for that upgrade.
 
@@ -149,13 +149,13 @@ Full playbook (HPA metric shapes, prometheus-adapter rules, KEDA alternative, co
 - Kubernetes ≥ 1.27 (Gateway API TLSRoute needs 1.25+; the chart uses `v1` + `v1alpha2`).
 - Helm ≥ 3.13 (chart uses `lookup`, `fromJsonArray`, `toJson`).
 - A `StorageClass` for `ReadWriteOnce` PVCs (one per replica).
-- Optional dependencies — only when the matching feature is enabled:
-  - **cert-manager** ≥ 1.14 — for `tls.backend: cert-manager`
-  - **prometheus-operator** — for `monitoring.serviceMonitor.enabled` / `prometheusRule.enabled`
-  - **ingress-nginx** ≥ 1.10 with `--enable-ssl-passthrough` — for `ingress.mode: ingress-nginx`
-  - **Gateway API** — for `ingress.mode: gateway-api` (Cilium 1.15, Istio 1.22 tested)
-  - **external-secrets** ≥ 0.9 — for `existingSecret` fields backed by Vault/AWS SM/…
-  - **Calico / Cilium / kube-router** — for `NetworkPolicy` enforcement (minikube's default CNI is a no-op)
+- Optional dependencies - only when the matching feature is enabled:
+  - **cert-manager** ≥ 1.14 - for `tls.backend: cert-manager`
+  - **prometheus-operator** - for `monitoring.serviceMonitor.enabled` / `prometheusRule.enabled`
+  - **ingress-nginx** ≥ 1.10 with `--enable-ssl-passthrough` - for `ingress.mode: ingress-nginx`
+  - **Gateway API** - for `ingress.mode: gateway-api` (Cilium 1.15, Istio 1.22 tested)
+  - **external-secrets** ≥ 0.9 - for `existingSecret` fields backed by Vault/AWS SM/…
+  - **Calico / Cilium / kube-router** - for `NetworkPolicy` enforcement (minikube's default CNI is a no-op)
 
 Full matrix: [`docs/compatibility.md`](docs/compatibility.md).
 
@@ -173,7 +173,7 @@ helm upgrade --install ldap kubernetes/charts/openldap-platform \
   --set phpldapadmin.enabled=true \
   --set self-service-password.enabled=true
 
-# Cross-cluster HA — see kubernetes/tests/cross-cluster/ for a Vagrant rig
+# Cross-cluster HA - see kubernetes/tests/cross-cluster/ for a Vagrant rig
 ```
 
 Ready-made overlays (dev PoC, small prod, multi-DC, GitOps): [`docs/recipes.md`](docs/recipes.md).
@@ -196,11 +196,11 @@ kubectl -n ldap get secret ldap-openldap-admin \
   -o jsonpath='{.data.admin-password}' | base64 -d ; echo
 ```
 
-> All Secrets carry `helm.sh/resource-policy: keep` — they survive `helm uninstall`, so re-installing the same release name preserves credentials. Override any of them by setting the matching `existingSecret` value (see [Ad-hoc CLI use](#ad-hoc-cli-use) and each subchart's `values.yaml`).
+> All Secrets carry `helm.sh/resource-policy: keep` - they survive `helm uninstall`, so re-installing the same release name preserves credentials. Override any of them by setting the matching `existingSecret` value (see [Ad-hoc CLI use](#ad-hoc-cli-use) and each subchart's `values.yaml`).
 
 ---
 
-## Administration — openldap-cli
+## Administration - openldap-cli
 
 Two flows: **declarative** (`values.yaml` reconciled by sync Jobs on every upgrade) and **ad-hoc** (run the CLI locally against port-forward or the ingress).
 
@@ -213,11 +213,11 @@ Six values blocks (`openldap.overlays`, `openldap.policies`, `openldap.acls`, `o
 | 4 | `overlays` | `config overlay enable/disable` | Loads modules + toggles overlays (memberof, refint, ppolicy…). Runs first so downstream Jobs see the overlays already active. |
 | 5 | `ppolicy` | `ppolicy set` | Idempotent create/update of policy templates under `ou=policies`. |
 | 8 | `acls` | `config acl grant/revoke` | Chart-owned grantee (group|dn); revoke-then-grant on each upgrade. |
-| 9 | `tree-grants` | `svc grant/revoke` | Tree-scoped ACL helper — container + entry rules for a service account. |
+| 9 | `tree-grants` | `svc grant/revoke` | Tree-scoped ACL helper - container + entry rules for a service account. |
 | 10 | `users` | `user add/set/delete` | Auto-generated passwords land in `<release>-openldap-user-<uid>` Secrets. |
 | 15 | `groups` | `group create/add-member/remove-member/set` | Reconciles `members` + description. |
 
-Drift removal for `acls` / `treeGrants` / `overlays` uses a chart-managed ConfigMap `<release>-openldap-sync-state` (one JSON key per phase) that snapshots the previously-applied set — entries removed from `values.yaml` on the next upgrade are revoked / disabled automatically.
+Drift removal for `acls` / `treeGrants` / `overlays` uses a chart-managed ConfigMap `<release>-openldap-sync-state` (one JSON key per phase) that snapshots the previously-applied set - entries removed from `values.yaml` on the next upgrade are revoked / disabled automatically.
 
 ```yaml
 openldap:
@@ -237,8 +237,8 @@ openldap:
       givenName: Alice
       sn: Wonderland
       mail: alice@example.org
-      policy: strong             # optional — triggers `ppolicy assign`
-      attrs:                     # optional — free-form extra `user set`
+      policy: strong             # optional - triggers `ppolicy assign`
+      attrs:                     # optional - free-form extra `user set`
         title: Engineer
   groups:
     - cn: devs
@@ -247,25 +247,25 @@ openldap:
     - cn: readers
       description: Read-only group
       members: [alice]
-  onUserRemove: delete           # or `lock` — pwdAccountLockedTime instead
+  onUserRemove: delete           # or `lock` - pwdAccountLockedTime instead
   onGroupRemove: delete
   acls:                          # config acl grant, one clause per grantee
     - name: readers-can-read-users
       target: ou=users,dc=example,dc=org
       group: readers
       access: read
-  treeGrants:                    # svc grant — container + entry rules
+  treeGrants:                    # svc grant - container + entry rules
     - name: app-svc
       tree: ou=users,dc=example,dc=org
       access: read
-      membersOf: admins          # optional — narrow entry rule to a group
+      membersOf: admins          # optional - narrow entry rule to a group
   aclLintCronJob:                # daily `config acl lint`, fails on shadowed rules
     enabled: true
 ```
 
 Passwords per user land in `<release>-openldap-user-<uid>`. Attribute changes reconcile on every upgrade. Group membership is expressed on the group side; the `memberOf` overlay auto-populates the user entry.
 
-The sync Jobs install `openldap-cli` + `kubectl` from GitHub / dl.k8s.io into a plain Alpine image at Job startup — no custom image build required. Their ServiceAccount is scoped strictly to Secret CRUD, ConfigMap get/create/patch for the sync-state (when `acls`/`treeGrants`/`overlays` are used), and `statefulsets/patch` when TLS renewal needs a rolling restart — all in the release namespace.
+The sync Jobs install `openldap-cli` + `kubectl` from GitHub / dl.k8s.io into a plain Alpine image at Job startup - no custom image build required. Their ServiceAccount is scoped strictly to Secret CRUD, ConfigMap get/create/patch for the sync-state (when `acls`/`treeGrants`/`overlays` are used), and `statefulsets/patch` when TLS renewal needs a rolling restart - all in the release namespace.
 
 ### Ad-hoc CLI use
 
@@ -291,7 +291,7 @@ LDAP_CONFIG_BIND_PW=$(kubectl -n ldap get secret ldap-openldap-admin -o jsonpath
 openldap-cli ops db-stats
 ```
 
-Full CLI command reference: see [Docker README → Administration](../docker/README.md#administration--openldap-cli) — same binary, same commands.
+Full CLI command reference: see [Docker README → Administration](../docker/README.md#administration--openldap-cli) - same binary, same commands.
 
 ---
 
@@ -300,7 +300,7 @@ Full CLI command reference: see [Docker README → Administration](../docker/REA
 Chart-managed passwords survive `helm uninstall` (annotated `helm.sh/resource-policy: keep`). To rotate:
 
 ```bash
-# 1. Delete the Secret you want to rotate — chart re-generates a fresh
+# 1. Delete the Secret you want to rotate - chart re-generates a fresh
 #    random on the next `helm upgrade` (via the lookup + fallback pattern).
 kubectl -n ldap delete secret ldap-openldap-admin
 
@@ -376,11 +376,11 @@ openldap:
       secretName: my-tls-secret
 ```
 
-**Syncrepl over TLS** — `replication.startTLS: "yes|critical"` + `replication.tlsReqcert: never|allow|try|demand` control the handshake on each `olcSyncRepl` entry. Quote `"yes"` — YAML 1.1 parses bare `yes` as boolean.
+**Syncrepl over TLS** - `replication.startTLS: "yes|critical"` + `replication.tlsReqcert: never|allow|try|demand` control the handshake on each `olcSyncRepl` entry. Quote `"yes"` - YAML 1.1 parses bare `yes` as boolean.
 
 ### Ingress (LDAPS only)
 
-`openldap.ingress.enabled: true` publishes LDAPS externally. Requires `tls.enabled: true` — both modes rely on SNI passthrough.
+`openldap.ingress.enabled: true` publishes LDAPS externally. Requires `tls.enabled: true` - both modes rely on SNI passthrough.
 
 ```yaml
 openldap:
@@ -396,13 +396,13 @@ openldap:
       port: 636
 ```
 
-Plaintext LDAP (389) is not routed via Ingress — use a `LoadBalancer` or `NodePort` Service if you need it externally.
+Plaintext LDAP (389) is not routed via Ingress - use a `LoadBalancer` or `NodePort` Service if you need it externally.
 
 ---
 
 ## Database storage & sizing
 
-Every replica gets one PVC with three subPath mounts (`slapd.d/`, `openldap-data/`, `accesslog-data/`). LMDB is copy-on-write and grows sparsely up to `olcDbMaxSize` — set high, pay only for what's used.
+Every replica gets one PVC with three subPath mounts (`slapd.d/`, `openldap-data/`, `accesslog-data/`). LMDB is copy-on-write and grows sparsely up to `olcDbMaxSize` - set high, pay only for what's used.
 
 ```yaml
 openldap:
@@ -412,16 +412,16 @@ openldap:
     size: 10Gi                    # per replica
   database:
     main:
-      maxSizeBytes: 4294967296    # 4 GiB — bump for >100k entries
+      maxSizeBytes: 4294967296    # 4 GiB - bump for >100k entries
     accesslog:
-      maxSizeBytes: 4294967296    # 4 GiB — #1 prod incident source
+      maxSizeBytes: 4294967296    # 4 GiB - #1 prod incident source
   accesslog:
     ops: "writes"                 # drop `bind` on high-traffic setups
     logSuccess: false
     purge: "03+00:00 00+06:00"    # sweep every 3 h, keep 6 h
 ```
 
-**`MDB_MAP_FULL` live-fix recipe** (no downtime — `mdb_env_set_mapsize` is applied on next transaction):
+**`MDB_MAP_FULL` live-fix recipe** (no downtime - `mdb_env_set_mapsize` is applied on next transaction):
 
 ```bash
 kubectl -n ldap exec ldap-openldap-0 -c openldap -- \
@@ -504,7 +504,7 @@ Exporter binds as `cn=adminconfig,cn=config` (config-admin has the `cn=Monitor` 
 
 ## POSIX support
 
-Add `nis` to `openldap.directory.schemas` to load the POSIX schema (`uidNumber`, `gidNumber`, `homeDirectory`, `loginShell`, `shadow*`) — required for SSH / UNIX login backed by LDAP. The chart auto-adds a matching `olcDbIndex: uidNumber,gidNumber eq` on the main mdb.
+Add `nis` to `openldap.directory.schemas` to load the POSIX schema (`uidNumber`, `gidNumber`, `homeDirectory`, `loginShell`, `shadow*`) - required for SSH / UNIX login backed by LDAP. The chart auto-adds a matching `olcDbIndex: uidNumber,gidNumber eq` on the main mdb.
 
 ```yaml
 openldap:
@@ -553,9 +553,9 @@ Chart defaults are strict; every knob below is on out-of-the-box:
 - **`capabilities.drop: [ALL]`**; slapd adds only `NET_BIND_SERVICE` for the privileged ports.
 - **`seccompProfile: RuntimeDefault`** at pod level.
 - **`automountServiceAccountToken: false`** on the server SA (only sync/tls Jobs mount their token).
-- **PodDisruptionBudget** — `podDisruptionBudget.enabled: auto` emits `minAvailable: replicas - 1` in HA modes and skips in standalone.
-- **NetworkPolicy** — `networkPolicy.enabled: true` emits a default-deny scoped to `app.kubernetes.io/component: server` (and a matching one for the readonly pool) with explicit allows for peer syncrepl, sync/backup/tls Jobs, Prometheus scrape, and external LDAPS peers.
-- **PodSecurityAdmission** — label the release namespace `pod-security.kubernetes.io/enforce=restricted`; every pod the chart emits already satisfies `restricted`.
+- **PodDisruptionBudget** - `podDisruptionBudget.enabled: auto` emits `minAvailable: replicas - 1` in HA modes and skips in standalone.
+- **NetworkPolicy** - `networkPolicy.enabled: true` emits a default-deny scoped to `app.kubernetes.io/component: server` (and a matching one for the readonly pool) with explicit allows for peer syncrepl, sync/backup/tls Jobs, Prometheus scrape, and external LDAPS peers.
+- **PodSecurityAdmission** - label the release namespace `pod-security.kubernetes.io/enforce=restricted`; every pod the chart emits already satisfies `restricted`.
 
 ```bash
 kubectl label ns ldap \
@@ -571,10 +571,10 @@ kubectl label ns ldap \
 
 Reference `Application` manifest at [`gitops/argocd/application.yaml`](gitops/argocd/application.yaml). Key points:
 
-- Chart source from Git — Argo resolves `file://` subchart deps transparently.
+- Chart source from Git - Argo resolves `file://` subchart deps transparently.
 - Set `syncOptions: [CreateNamespace=true, ServerSideApply=true, RespectIgnoreDifferences=true]`.
-- Add `ignoreDifferences` on chart-managed Secrets — the `lookup` pattern makes them drift by design in dry-runs.
-- **Never** enable wildcard prune on Secrets marked `helm.sh/resource-policy: keep` — you'd rotate every credential silently.
+- Add `ignoreDifferences` on chart-managed Secrets - the `lookup` pattern makes them drift by design in dry-runs.
+- **Never** enable wildcard prune on Secrets marked `helm.sh/resource-policy: keep` - you'd rotate every credential silently.
 
 App-of-apps for multi-env (dev/stage/prod): [`gitops/argocd/app-of-apps.yaml`](gitops/argocd/app-of-apps.yaml).
 
@@ -613,7 +613,7 @@ Full bootstrap runbook: [`docs/cross-cluster.md`](docs/cross-cluster.md).
 
 ## Detailed docs
 
-Operator handbook — task-oriented, deep-dive:
+Operator handbook - task-oriented, deep-dive:
 
 | Doc                                        | When to open                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------- |

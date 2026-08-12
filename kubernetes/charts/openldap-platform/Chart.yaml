@@ -1,7 +1,7 @@
 apiVersion: v2
 name: openldap-platform
 description: |
-  Umbrella chart for the OpenLDAP platform — OpenLDAP server (HA-ready
+  Umbrella chart for the OpenLDAP platform - OpenLDAP server (HA-ready
   StatefulSet + delta-syncrepl), phpLDAPadmin, and Self Service Password.
   Declarative GitOps-friendly administration via openldap-cli
   (https://github.com/maximewewer/openldap-cli).
@@ -28,7 +28,7 @@ maintainers:
   - name: maximewewer
     url: https://github.com/maximewewer
 # =============================================================================
-# ArtifactHub annotations — https://artifacthub.io/docs/topics/annotations/helm/
+# ArtifactHub annotations - https://artifacthub.io/docs/topics/annotations/helm/
 # =============================================================================
 annotations:
   artifacthub.io/category: security

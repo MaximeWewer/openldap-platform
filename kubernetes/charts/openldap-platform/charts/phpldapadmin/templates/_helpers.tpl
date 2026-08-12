@@ -56,7 +56,7 @@ matches what the openldap subchart emits when installed alongside.
 {{- end -}}
 
 {{/*
-Bind password Secret name — either the user's override or a chart-managed
+Bind password Secret name - either the user's override or a chart-managed
 Secret populated with a persisted random password.
 */}}
 {{- define "phpldapadmin.bindSecretName" -}}

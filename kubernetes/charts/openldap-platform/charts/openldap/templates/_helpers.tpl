@@ -6,7 +6,7 @@ Expand the name of the chart.
 {{- end -}}
 
 {{/*
-Fully qualified app name — <release>-<chart> unless the release already
+Fully qualified app name - <release>-<chart> unless the release already
 carries the chart name (avoids ldap-openldap when release is "openldap").
 */}}
 {{- define "openldap.fullname" -}}
@@ -30,7 +30,7 @@ Chart-name label value.
 {{- end -}}
 
 {{/*
-Standard label set — recommended labels + Helm meta.
+Standard label set - recommended labels + Helm meta.
 */}}
 {{- define "openldap.labels" -}}
 helm.sh/chart: {{ include "openldap.chart" . }}
@@ -44,7 +44,7 @@ app.kubernetes.io/part-of: openldap-platform
 {{- end -}}
 
 {{/*
-Selector labels — stable subset used in Service selectors and StatefulSet.
+Selector labels - stable subset used in Service selectors and StatefulSet.
 */}}
 {{- define "openldap.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "openldap.name" . }}
@@ -63,7 +63,7 @@ ServiceAccount name.
 {{- end -}}
 
 {{/*
-Admin Secret name — either an override (existingSecret) or the chart-managed
+Admin Secret name - either an override (existingSecret) or the chart-managed
 `<fullname>-admin` Secret. Never write into the user-managed Secret.
 */}}
 {{- define "openldap.adminSecretName" -}}
@@ -98,7 +98,7 @@ Headless service DNS name (for peer discovery in HA modes).
 {{- end -}}
 
 {{/*
-Render pod affinity — user-provided `.Values.affinity` wins, otherwise
+Render pod affinity - user-provided `.Values.affinity` wins, otherwise
 build from the `podAntiAffinityPreset` + `nodeAffinityPreset` shorthands.
 Call as:
     {{ include "openldap.affinity" (dict "context" . "component" "server") }}
@@ -124,7 +124,7 @@ Call as:
 {{- end -}}
 {{- end -}}
 
-{{- /* Node affinity — match a label key + accepted values. */ -}}
+{{- /* Node affinity - match a label key + accepted values. */ -}}
 {{- $na := $ctx.Values.nodeAffinityPreset -}}
 {{- if and $na.type $na.key $na.values -}}
 {{- $term := dict "matchExpressions" (list (dict "key" $na.key "operator" "In" "values" $na.values)) -}}
@@ -140,7 +140,7 @@ Call as:
 {{- end -}}
 
 {{/*
-Bootstrap ConfigMap name — either the user's override or the chart-managed
+Bootstrap ConfigMap name - either the user's override or the chart-managed
 `<fullname>-bootstrap`.
 */}}
 {{- define "openldap.bootstrapConfigMapName" -}}
@@ -163,7 +163,7 @@ Read-only StatefulSet + Service names.
 {{- end -}}
 
 {{/*
-Replicator Secret name — either an override (existingSecret) or the chart-
+Replicator Secret name - either an override (existingSecret) or the chart-
 managed `<fullname>-replicator` Secret with a persisted random password.
 */}}
 {{- define "openldap.replicatorSecretName" -}}
@@ -175,7 +175,7 @@ managed `<fullname>-replicator` Secret with a persisted random password.
 {{- end -}}
 
 {{/*
-TLS Secret name — depends on the tls.backend:
+TLS Secret name - depends on the tls.backend:
   provided     -> the user-supplied Secret
   cert-manager -> chart-managed <fullname>-tls (target of the Certificate CR)
   job          -> chart-managed <fullname>-tls (written by the tls-init Job)

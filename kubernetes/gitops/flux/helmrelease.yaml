@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# HelmRelease — install / upgrade the chart from the GitRepository above.
+# HelmRelease - install / upgrade the chart from the GitRepository above.
 #
 # The `install` + `upgrade` stanzas mirror the plain `helm install/upgrade`
 # defaults; keep them explicit so the Helm hooks the chart ships (tls-init

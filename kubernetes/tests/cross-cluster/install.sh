@@ -7,7 +7,7 @@
 #   4. helm install dc2, wait for pods ready.
 #   5. Verify base tree present on both.
 #
-# Idempotent — safe to re-run on top of an existing deploy (values change
+# Idempotent - safe to re-run on top of an existing deploy (values change
 # → helm upgrade path).
 set -euo pipefail
 
@@ -54,7 +54,7 @@ install_dc() {
       -f ${REMOTE_ROOT}/${values} --wait --timeout 6m"
 
   # NodePort 30636 lives on the minikube docker network (192.168.49.2)
-  # — invisible from the OTHER VM. Bridge it to the VM's private_network
+  # - invisible from the OTHER VM. Bridge it to the VM's private_network
   # interface via socat, running as a systemd service so it survives
   # reboots + install.sh re-runs.
   echo "=== [${dc}] setting up socat forwarder VM:30636 → minikube:30636 ==="
@@ -97,7 +97,7 @@ echo "    ADMIN_PW=${ADMIN_PW}"
 echo "    CFG_ADMIN_PW=${CFG_ADMIN_PW}"
 echo "    REPLICATOR_PW=${REPLICATOR_PW}"
 echo ""
-echo "Save them somewhere — re-running install.sh generates new ones unless"
+echo "Save them somewhere - re-running install.sh generates new ones unless"
 echo "you 'export' these vars before the second run."
 echo ""
 echo "Next: export ADMIN_PW=... ; bash test-replication.sh"

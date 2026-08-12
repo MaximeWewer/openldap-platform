@@ -1,7 +1,7 @@
 # Cross-cluster HA bootstrap
 
 The chart supports N-way multi-master replication across independent
-Kubernetes clusters — every cluster runs its own openldap-platform release,
+Kubernetes clusters - every cluster runs its own openldap-platform release,
 and each peer syncs against the others through `replication.externalPeers`.
 
 The steps below assume two data centres (`dc1`, `dc2`); scale the pattern to
@@ -14,7 +14,7 @@ more clusters by giving each one its own `serverIdBase`.
    `LoadBalancer` Service, port 636 has to accept traffic from every peer's
    egress IP. Publish a stable FQDN per cluster
    (`ldap.dc1.example.com`, `ldap.dc2.example.com`, …).
-2. **Shared TLS trust.** Every peer needs to trust the same CA — the
+2. **Shared TLS trust.** Every peer needs to trust the same CA - the
    simplest path is a single self-signed CA distributed to each cluster as
    the `tls.provided` Secret. If you use `tls.backend: cert-manager` on
    each cluster, point every Issuer at the SAME external CA (for example
@@ -31,11 +31,11 @@ more clusters by giving each one its own `serverIdBase`.
 4. **Shared replicator credentials.** Every peer's syncrepl connects as
    `cn=replicator,ou=service-accounts,<suffix>` with the SAME password.
    Provision the same Secret (key `replicator-password`) on every cluster
-   via external-secrets — see `values.replication.replicator.existingSecret`.
+   via external-secrets - see `values.replication.replicator.existingSecret`.
 
 5. **`cn=config` replication stays inside each cluster.**
    `replication.replicateConfig.enabled` builds its syncrepl provider list
-   from the in-cluster StatefulSet pods only, never from `externalPeers` —
+   from the in-cluster StatefulSet pods only, never from `externalPeers` -
    deliberately. `cn=config` carries the per-cluster `serverIdBase` and the
    per-cluster peer list, so replicating it across clusters would have each
    cluster overwrite the other's topology. Enable it per cluster if you want
@@ -48,7 +48,7 @@ Bring the clusters up one at a time. Only the first one seeds the
 directory tree; every subsequent cluster starts empty and pulls the full
 dataset from the peers via syncrepl.
 
-### 1. dc1 — seed cluster
+### 1. dc1 - seed cluster
 
 Values overlay:
 
@@ -60,7 +60,7 @@ openldap:
     suffix: dc=example,dc=org
   replication:
     serverIdBase: 1
-    seedOnOrdinalZeroOnly: true       # default — pod-0 in dc1 loads base data
+    seedOnOrdinalZeroOnly: true       # default - pod-0 in dc1 loads base data
     replicator:
       existingSecret: shared-replicator
     externalPeers:
@@ -89,7 +89,7 @@ kubectl -n ldap exec ldap-openldap-0 -- \
   ldapsearch -x -H ldap://localhost:389 -b dc=example,dc=org dn | head
 ```
 
-### 2. dc2 — joining cluster
+### 2. dc2 - joining cluster
 
 Values overlay:
 
@@ -101,7 +101,7 @@ openldap:
     suffix: dc=example,dc=org           # same suffix everywhere
   replication:
     serverIdBase: 10                    # distinct decade
-    seedOnOrdinalZeroOnly: false        # DO NOT re-seed — pull from dc1
+    seedOnOrdinalZeroOnly: false        # DO NOT re-seed - pull from dc1
     replicator:
       existingSecret: shared-replicator
     externalPeers:
@@ -119,7 +119,7 @@ openldap:
 ```
 
 `seedOnOrdinalZeroOnly: false` prevents pod-0 in dc2 from loading the base
-LDIF locally — instead, syncrepl pulls the full tree from dc1 within a few
+LDIF locally - instead, syncrepl pulls the full tree from dc1 within a few
 seconds of first bind.
 
 ```bash
@@ -137,7 +137,7 @@ kubectl -n ldap exec ldap-openldap-0 -- \
 # Should match dc1's count.
 ```
 
-### 3. dc3+ — same pattern as dc2
+### 3. dc3+ - same pattern as dc2
 
 Same overlay as dc2 with `serverIdBase: 20` and its own hostname.
 
@@ -172,7 +172,7 @@ Reverse the operation:
 
 ## Split-brain avoidance
 
-Multi-master resolves conflicts via delta-syncrepl's entryCSN comparison —
+Multi-master resolves conflicts via delta-syncrepl's entryCSN comparison -
 the write with the newest CSN wins. That is fine for eventual convergence
 but does not protect against split-brain during network partitions. If two
 DCs get partitioned and both accept writes on the SAME entry, the loser's
@@ -181,16 +181,16 @@ change is silently overwritten when connectivity comes back.
 Mitigations:
 
 - **Route writes to a single DC at a time** via GeoDNS + client
-  affinity — every DC still accepts reads locally, but writes go through
+  affinity - every DC still accepts reads locally, but writes go through
   the "primary" DC. Switch the primary manually during DC-level failover.
 - **Monitor `openldap_replication_lag_seconds`** (shipped by the
-  Prometheus exporter — see `openldap.monitoring.enabled`). Alert on lag
+  Prometheus exporter - see `openldap.monitoring.enabled`). Alert on lag
   above a business-defined threshold.
-- **Keep the accesslog purge conservative** — the syncrepl session log is
+- **Keep the accesslog purge conservative** - the syncrepl session log is
   sized off `accesslog.purge`; too aggressive a purge on a partitioned DC
   forces a full refresh instead of a delta once connectivity returns.
 
-## Runbook — CA rotation across the mesh
+## Runbook - CA rotation across the mesh
 
 Rotating the shared CA is the one operation that must span every cluster
 in lockstep, because all peers must trust the new chain before any peer

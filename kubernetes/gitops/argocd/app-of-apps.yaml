@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# app-of-apps — one Argo CD Application per environment, pointing at a folder
+# app-of-apps - one Argo CD Application per environment, pointing at a folder
 # that holds one Application manifest per env (dev/stage/prod, or per DC in
 # a cross-cluster HA layout). Layout expected in Git:
 #
