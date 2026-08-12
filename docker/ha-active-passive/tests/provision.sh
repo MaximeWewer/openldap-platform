@@ -13,7 +13,15 @@ if command -v cloud-init >/dev/null 2>&1; then
 fi
 systemctl stop unattended-upgrades.service 2>/dev/null || true
 systemctl mask  unattended-upgrades.service 2>/dev/null || true
+# DPkg::Lock::Timeout does NOT cover /var/lib/apt/lists/lock, which cloud-init
+# or a background apt still holds on a freshly booted VM - wait for it too,
+# otherwise `apt-get update` dies with "Could not get lock .../lists/lock".
 APT="apt-get -o DPkg::Lock::Timeout=600"
+for _ in $(seq 1 120); do
+  fuser /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+  echo "waiting for another apt process to release its lock..."
+  sleep 5
+done
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "=== Installing Docker ==="
@@ -42,6 +50,8 @@ REPLICATOR_PASSWORD=replicatorpassword
 HAPROXY_STATS_USER=admin
 HAPROXY_STATS_PASSWORD=admin
 ENABLE_PHPLDAPADMIN=${ENABLE_PHPLDAPADMIN:-false}
+REPLICATE_CONFIG=${REPLICATE_CONFIG:-false}
+CONFIG_ADMIN_PASSWORD=${CONFIG_ADMIN_PASSWORD:-adminpasswordconfig}
 EOF
 
 if [ "$SERVER_ID" != "1" ]; then

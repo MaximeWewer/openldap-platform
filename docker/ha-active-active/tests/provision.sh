@@ -14,8 +14,17 @@ fi
 # Stop unattended-upgrades so it doesn't race with our apt-get calls
 systemctl stop unattended-upgrades.service 2>/dev/null || true
 systemctl mask  unattended-upgrades.service 2>/dev/null || true
-# apt-get lock timeout - waits up to 600s if another apt holds the lock
+# apt-get lock timeout - waits up to 600s if another apt holds the dpkg lock.
+# DPkg::Lock::Timeout does NOT cover /var/lib/apt/lists/lock, which cloud-init
+# or a background apt still holds on a freshly booted VM - so wait for that one
+# explicitly, otherwise `apt-get update` dies with
+# "Could not get lock /var/lib/apt/lists/lock".
 APT="apt-get -o DPkg::Lock::Timeout=600"
+for _ in $(seq 1 120); do
+  fuser /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+  echo "waiting for another apt process to release its lock..."
+  sleep 5
+done
 
 # === Install Docker if missing ===
 if ! command -v docker >/dev/null 2>&1; then
@@ -45,6 +54,8 @@ REPLICATOR_PASSWORD=replicatorpassword
 HAPROXY_STATS_USER=admin
 HAPROXY_STATS_PASSWORD=admin
 ENABLE_PHPLDAPADMIN=${ENABLE_PHPLDAPADMIN:-false}
+REPLICATE_CONFIG=${REPLICATE_CONFIG:-false}
+CONFIG_ADMIN_PASSWORD=${CONFIG_ADMIN_PASSWORD:-adminpasswordconfig}
 EOF
 
 # === Wait for node1 (peers need a sync source) ===

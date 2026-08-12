@@ -57,7 +57,10 @@ Vagrant.configure("2") do |config|
       node.vm.provision "shell", path: "provision.sh", env: {
         "SERVER_ID"           => i.to_s,
         "NODE_URIS"           => NODE_URIS,
-        "ENABLE_PHPLDAPADMIN" => (i == 1 ? "true" : "false")
+        "ENABLE_PHPLDAPADMIN" => (i == 1 ? "true" : "false"),
+        # Replicate cn=config too (ACLs / overlays / schema / ppolicy).
+        # Export REPLICATE_CONFIG=true before `vagrant up` to exercise it.
+        "REPLICATE_CONFIG"    => ENV.fetch("REPLICATE_CONFIG", "false")
       }
     end
   end

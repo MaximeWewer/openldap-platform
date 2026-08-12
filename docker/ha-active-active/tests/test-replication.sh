@@ -18,10 +18,17 @@ fi
 
 ADMIN_DN="cn=admin,dc=example,dc=org"
 ADMIN_PW="adminpassword"
+CONFIG_DN="cn=adminconfig,cn=config"
+CONFIG_PW="${CONFIG_ADMIN_PASSWORD:-adminpasswordconfig}"
+REPLICATE_CONFIG="${REPLICATE_CONFIG:-false}"
 BASE_DN="dc=example,dc=org"
 TEST_UID="repltest-$(date +%s)-$$"
 TEST_DN="cn=$TEST_UID,ou=users,$BASE_DN"
 WAIT_TIMEOUT=15
+# cn=config converges slower than data: writing olcDatabase={1}mdb,cn=config
+# makes slapd reload that database, which bounces the syncrepl sessions on
+# every node. Measured at up to ~20s on a 3-node cluster.
+CFG_WAIT_TIMEOUT=60
 
 cleanup() {
   # Delete test entry on first node (replicates out)
@@ -108,4 +115,62 @@ EOF
   else
     echo "  Write rejected on ${PEERS[$LAST_IDX]} (read-only consumer — expected in mirror mode)"
   fi
+fi
+
+# === 5. cn=config convergence (only when REPLICATE_CONFIG=true) ===
+# Writes a harmless olcLimits entry on peer[0] and checks every peer sees it.
+# olcLimits for a non-existent DN has no behavioural effect and is removed
+# right after, so the test is safe to run against a live cluster.
+if [ "$REPLICATE_CONFIG" = "true" ]; then
+  MDB_DN="olcDatabase={1}mdb,cn=config"
+  CFG_MARKER="cn=cfgtest-$(date +%s)-$$,$BASE_DN"
+  CFG_LIMIT="dn.exact=\"$CFG_MARKER\" size=100"
+
+  cfg_cleanup() {
+    ldapmodify -x -H "${PEERS[0]}" -D "$CONFIG_DN" -w "$CONFIG_PW" >/dev/null 2>&1 <<EOF || true
+dn: $MDB_DN
+delete: olcLimits
+olcLimits: $CFG_LIMIT
+EOF
+  }
+  trap 'cleanup; cfg_cleanup' EXIT
+
+  echo
+  echo "=== cn=config: writing olcLimits marker on ${PEERS[0]} ==="
+  ldapmodify -x -H "${PEERS[0]}" -D "$CONFIG_DN" -w "$CONFIG_PW" <<EOF
+dn: $MDB_DN
+add: olcLimits
+olcLimits: $CFG_LIMIT
+EOF
+
+  echo
+  echo "=== Verifying cn=config replication on each peer (timeout ${CFG_WAIT_TIMEOUT}s) ==="
+  CFG_FAIL=0
+  for uri in "${PEERS[@]}"; do
+    printf "  %-40s " "$uri"
+    found=false
+    for _ in $(seq 1 "$CFG_WAIT_TIMEOUT"); do
+      if ldapsearch -x -H "$uri" -D "$CONFIG_DN" -w "$CONFIG_PW" \
+           -o ldif-wrap=no -b "$MDB_DN" -s base -LLL olcLimits 2>/dev/null | grep -q "$CFG_MARKER"; then
+        found=true
+        break
+      fi
+      sleep 1
+    done
+    if $found; then echo "REPLICATED"; else echo "MISSING"; CFG_FAIL=1; fi
+  done
+
+  echo
+  if [ "$CFG_FAIL" = "0" ]; then
+    echo "=== cn=config replication OK ==="
+  else
+    echo "=== cn=config replication FAILED on at least one peer ==="
+    echo "    Check: syncprov must exist on olcDatabase={0}config, the peer's"
+    echo "    olcSyncrepl must cover searchbase=olcDatabase={1}mdb,cn=config,"
+    echo "    and CONFIG_ADMIN_PASSWORD must match on every node."
+    exit 1
+  fi
+else
+  echo
+  echo "=== cn=config replication: skipped (REPLICATE_CONFIG != true) ==="
 fi

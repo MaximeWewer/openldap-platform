@@ -21,6 +21,8 @@ set -a; source .env; set +a
 : "${REPLICATOR_PASSWORD:?REPLICATOR_PASSWORD required}"
 : "${HAPROXY_STATS_USER:=admin}"
 : "${HAPROXY_STATS_PASSWORD:=admin}"
+: "${REPLICATE_CONFIG:=false}"
+: "${CONFIG_ADMIN_PASSWORD:=adminpasswordconfig}"
 
 IMAGE="cleanstart/openldap:2.6.13"
 LDAP_UID=101
@@ -37,6 +39,7 @@ fi
 echo "=== Active-Active node config ==="
 echo "  ServerID:   $SERVER_ID / $NUM_PEERS"
 echo "  Peers:      $NODE_URIS"
+echo "  cn=config replication: $REPLICATE_CONFIG"
 
 # === Reset check ===
 SLAPD_DIR="./data/slapd.d"
@@ -57,8 +60,36 @@ mkdir -p ./data/slapd.d ./data/openldap-data ./data/accesslog-data
 echo "=== Hashing replicator password ==="
 REPLICATOR_PASSWORD_HASH=$(docker run --rm --entrypoint slappasswd "$IMAGE" -s "$REPLICATOR_PASSWORD")
 
-# === Build serverID block (single-int form per node) ===
-SERVER_IDS_BLOCK="olcServerID: $SERVER_ID"
+# === Hash cn=config rootDN password ===
+# Rendered (instead of hardcoded in the template) because the cn=config
+# syncrepl consumer has to bind with the CLEARTEXT value: the rootDN bind
+# bypasses the {0}config ACL, so no extra ACL clause is needed.
+CONFIG_ROOTPW_HASH=$(docker run --rm --entrypoint slappasswd "$IMAGE" -s "$CONFIG_ADMIN_PASSWORD")
+
+# === serverID ===
+# With cn=config replication the whole config DB is copied, `cn=config` root
+# entry included, so a single-int olcServerID would be overwritten by whichever
+# peer wrote last. slapd's answer is the URL form: the SAME list on every node,
+# each node recognising its own line by matching the URL against one of its
+# listeners.
+# The URLs are the REAL peer addresses from NODE_URIS. That match is what also
+# makes slapd DROP the syncrepl entry pointing at itself - without it a node
+# consumes its own config and syncprov answers its own consumer thread with
+# `(53) Server is unwilling to perform`, stalling the real consumers.
+# Binding a docker-host address requires host networking, which the generated
+# compose override switches on for exactly this case.
+SELF_URI="${PEERS[$((SERVER_ID - 1))]}"
+if [ "$REPLICATE_CONFIG" = "true" ]; then
+  SERVER_IDS_BLOCK=""
+  IDX=0
+  for uri in "${PEERS[@]}"; do
+    IDX=$((IDX + 1))
+    SERVER_IDS_BLOCK+="olcServerID: $IDX $uri"$'\n'
+  done
+  SERVER_IDS_BLOCK="${SERVER_IDS_BLOCK%$'\n'}"
+else
+  SERVER_IDS_BLOCK="olcServerID: $SERVER_ID"
+fi
 
 # === Build syncrepl block: every node replicates from every peer (incl. self, filtered by serverID) ===
 build_syncrepl_entry() {
@@ -83,6 +114,46 @@ done
 MDB_SYNCREPL_BLOCK="${MDB_SYNCREPL_BLOCK%$'\n'}"
 MDB_MIRRORMODE_LINE="olcMirrorMode: TRUE"
 
+# === cn=config replication (optional) ===
+# ONE syncrepl per peer over the WHOLE cn=config. Not several partial ones with
+# narrower searchbases: syncrepl entries on the same database share a single
+# contextCSN, so one advancing it makes the others believe they are current and
+# silently skip changes - the consumer then reports an up-to-date contextCSN
+# while its entries are stale. Measured, not theorised.
+# Self IS listed: the list must be identical on every node (it replicates too),
+# and slapd drops the self entry at runtime via the olcServerID URL match.
+# Not delta-syncrepl: the accesslog overlay is attached to {1}mdb only, so the
+# config DB has no changelog to pull from.
+# binddn is the config rootDN - it bypasses the {0}config ACL, which otherwise
+# denies everyone but itself (`by * none`).
+build_config_syncrepl_entry() {
+  local rid="$1" provider="$2"
+  printf 'olcSyncRepl: rid=%03d provider=%s\n' "$rid" "$provider"
+  printf '  bindmethod=simple binddn="cn=adminconfig,cn=config"\n'
+  printf '  credentials="%s"\n' "$CONFIG_ADMIN_PASSWORD"
+  printf '  searchbase="cn=config"\n'
+  printf '  type=refreshAndPersist retry="5 60 60 +"\n'
+  printf '  timeout=1\n'
+}
+
+CONFIG_SYNCREPL_BLOCK=""
+CONFIG_MIRRORMODE_LINE=""
+CONFIG_SYNCPROV_BLOCK=""
+if [ "$REPLICATE_CONFIG" = "true" ]; then
+  IDX=0
+  for uri in "${PEERS[@]}"; do
+    IDX=$((IDX + 1))
+    # rid namespace 1xx keeps config rids clear of the mdb rids above.
+    CONFIG_SYNCREPL_BLOCK+="$(build_config_syncrepl_entry "$((100 + IDX))" "$uri")"$'\n'
+  done
+  CONFIG_SYNCREPL_BLOCK="${CONFIG_SYNCREPL_BLOCK%$'\n'}"
+  CONFIG_MIRRORMODE_LINE="olcMirrorMode: TRUE"
+  # syncprov on {0}config - without a provider overlay the config DB serves no
+  # sync context and every consumer stalls.
+  # Leading + trailing newline keep the entry blank-line separated.
+  CONFIG_SYNCPROV_BLOCK=$'\ndn: olcOverlay=syncprov,olcDatabase={0}config,cn=config\nobjectClass: olcOverlayConfig\nobjectClass: olcSyncProvConfig\nolcOverlay: syncprov\nolcSpCheckpoint: 100 10\nolcSpSessionLog: 100\n'
+fi
+
 # === Render slapd-config.ldif ===
 echo "=== Rendering slapd-config.ldif ==="
 TMP_CFG=$(mktemp)
@@ -91,14 +162,19 @@ cleanup() { rm -f "$TMP_CFG"; rm -rf "$TMP_DATA"; }
 trap cleanup EXIT
 
 export SERVER_IDS_BLOCK MDB_SYNCREPL_BLOCK MDB_MIRRORMODE_LINE REPLICATOR_DN
+export CONFIG_SYNCREPL_BLOCK CONFIG_MIRRORMODE_LINE CONFIG_SYNCPROV_BLOCK CONFIG_ROOTPW_HASH
 python3 - > "$TMP_CFG" <<'PYEOF'
 import os
 with open("init-config/slapd-config.ldif.tmpl") as f:
     tpl = f.read()
-tpl = tpl.replace("@@SERVER_IDS@@",     os.environ.get("SERVER_IDS_BLOCK", ""))
-tpl = tpl.replace("@@MDB_SYNCREPL@@",   os.environ.get("MDB_SYNCREPL_BLOCK", ""))
-tpl = tpl.replace("@@MDB_MIRRORMODE@@", os.environ.get("MDB_MIRRORMODE_LINE", ""))
-tpl = tpl.replace("@@REPLICATOR_DN@@",  os.environ["REPLICATOR_DN"])
+tpl = tpl.replace("@@SERVER_IDS@@",        os.environ.get("SERVER_IDS_BLOCK", ""))
+tpl = tpl.replace("@@MDB_SYNCREPL@@",      os.environ.get("MDB_SYNCREPL_BLOCK", ""))
+tpl = tpl.replace("@@MDB_MIRRORMODE@@",    os.environ.get("MDB_MIRRORMODE_LINE", ""))
+tpl = tpl.replace("@@CONFIG_SYNCREPL@@",   os.environ.get("CONFIG_SYNCREPL_BLOCK", ""))
+tpl = tpl.replace("@@CONFIG_MIRRORMODE@@", os.environ.get("CONFIG_MIRRORMODE_LINE", ""))
+tpl = tpl.replace("@@CONFIG_SYNCPROV@@",   os.environ.get("CONFIG_SYNCPROV_BLOCK", ""))
+tpl = tpl.replace("@@CONFIG_ROOTPW@@",     os.environ["CONFIG_ROOTPW_HASH"])
+tpl = tpl.replace("@@REPLICATOR_DN@@",     os.environ["REPLICATOR_DN"])
 print(tpl)
 PYEOF
 
@@ -174,6 +250,41 @@ for k in ("HAPROXY_STATS_USER","HAPROXY_STATS_PASSWORD","LDAP_SERVERS","LDAPS_SE
     tpl=tpl.replace(f"@@{k}@@", os.environ.get(k,""))
 print(tpl)
 PYEOF
+
+# === compose override (cn=config replication only) ===
+# Two things are needed and they are linked:
+#   * slapd must LISTEN on the exact URL carried in olcServerID, otherwise it
+#     refuses to start ("no serverID / URL match found") and never filters the
+#     syncrepl entry pointing at itself;
+#   * that URL is the docker HOST address, which a bridge-networked container
+#     cannot bind - hence network_mode: host.
+# `networks` and `ports` are reset because compose rejects them alongside
+# network_mode: host (compose >= 2.24 / spec `!reset`).
+# entrypoint, NOT command: the image ENTRYPOINT is already a full slapd argv,
+# so a command: would be APPENDED and slapd would abort on the extra argument.
+OVERRIDE_FILE="docker-compose.override.yml"
+if [ "$REPLICATE_CONFIG" = "true" ]; then
+  echo "=== Rendering $OVERRIDE_FILE (host networking + pinned listeners) ==="
+  SELF_HOSTPORT="${SELF_URI#ldap://}"
+  SELF_HOST="${SELF_HOSTPORT%:*}"
+  LISTEN_URIS="$SELF_URI ldap://127.0.0.1:389 ldaps://${SELF_HOST}:636 ldaps://127.0.0.1:636"
+  cat > "$OVERRIDE_FILE" <<EOF
+# GENERATED by setup-node.sh - do not edit (regenerated on every run).
+# Present only because REPLICATE_CONFIG=true.
+services:
+  openldap:
+    network_mode: host
+    networks: !reset null
+    ports: !reset []
+    # Older Docker Engines reject `hostname` combined with network_mode: host
+    # ("conflicting options: hostname and the network mode"). Under host
+    # networking the container uses the host's name anyway, so drop it.
+    hostname: !reset null
+    entrypoint: ["slapd", "-u", "ldap", "-g", "ldap", "-h", "$LISTEN_URIS", "-d", "64"]
+EOF
+else
+  rm -f "$OVERRIDE_FILE"
+fi
 
 # === Start containers ===
 echo "=== Starting containers ==="

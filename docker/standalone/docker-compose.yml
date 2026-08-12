@@ -9,7 +9,10 @@ services:
     hostname: openldap
     restart: always
     # Uncomment for TLS/LDAPS support (requires certs + TLS config in slapd-config.ldif):
-    #command: ["slapd", "-d", "0", "-h", "ldap:// ldaps://", "-F", "/etc/openldap/slapd.d"]
+    # To change slapd's listeners you must override ENTRYPOINT, not command:
+    # the image's ENTRYPOINT is already a full slapd argv, so a `command:`
+    # would be APPENDED to it and slapd would abort with a usage dump.
+    #entrypoint: ["slapd", "-u", "ldap", "-g", "ldap", "-h", "ldap:// ldaps://", "-d", "64"]
     ports:
       - 389:389
       - 636:636

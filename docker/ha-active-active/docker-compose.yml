@@ -9,6 +9,10 @@ services:
     hostname: openldap-${SERVER_ID:-1}
     restart: always
     # Bind on all interfaces so peers can reach this node on host port 389.
+    # With REPLICATE_CONFIG=true, setup-node.sh generates a
+    # docker-compose.override.yml that switches this service to
+    # network_mode: host and resets networks/ports/hostname — slapd then
+    # binds the docker host address carried in olcServerID.
     ports:
       - "389:389"
       - "636:636"

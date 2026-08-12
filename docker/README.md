@@ -103,6 +103,11 @@ Pick the layout that matches your availability needs. Each mode is **self-contai
 | **HA Active-Passive** | [`ha-active-passive/`](ha-active-passive/) | 2 masters (MirrorMode) + N consumers + HAProxy `first` | active master only | consumer replicas | clean failover, no conflict risk   |
 | **HA Active-Active**  | [`ha-active-active/`](ha-active-active/)   | N masters (N-way Multi-Master) + HAProxy `roundrobin`  | any node           | any node          | max availability, write throughput |
 
+Both HA modes replicate `dc=example,dc=org` only by default. Set
+`REPLICATE_CONFIG=true` in the node `.env` to replicate `cn=config` as well, so
+ACLs / overlays / schema / ppolicy changes propagate instead of staying on the
+node that received them — details in the per-mode READMEs.
+
 Per-mode READMEs go into the specific operational details:
 
 - [standalone/README.md](standalone/README.md)
@@ -250,6 +255,12 @@ openldap-cli config set 'olcDatabase={0}config,cn=config' olcRootPW "$HASH"
 
 > After rotating any password, update the corresponding entry in your `~/.openldap-cli.yaml` profile (or the matching `LDAP_*` env var).
 
+> In the HA modes the `cn=config` rootDN password is rendered from
+> `CONFIG_ADMIN_PASSWORD` in the node `.env` (default `adminpasswordconfig`).
+> Rotate it there too, otherwise the next `setup-node.sh --reset` puts the old
+> one back — and with `REPLICATE_CONFIG=true` it is also the bind credential of
+> the `cn=config` syncrepl, so it must stay identical on every node.
+
 ---
 
 ## TLS / LDAPS
@@ -277,7 +288,9 @@ openldap-cli config set 'olcDatabase={0}config,cn=config' olcRootPW "$HASH"
 3. **Uncomment the `command`** in `docker-compose.yml` to enable `ldaps://`:
 
    ```yaml
-   command: ["slapd", "-d", "0", "-h", "ldap:// ldaps://", "-F", "/etc/openldap/slapd.d"]
+   # ENTRYPOINT, not command: the image's ENTRYPOINT is already a full slapd
+   # argv, so a `command:` is APPENDED to it and slapd aborts with a usage dump.
+   entrypoint: ["slapd", "-u", "ldap", "-g", "ldap", "-h", "ldap:// ldaps://", "-d", "64"]
    ```
 
 4. **phpLDAPadmin over LDAPS** (standalone only — HA phpLDAPadmin points at HAProxy):

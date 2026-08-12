@@ -11,6 +11,10 @@ docker/ha-active-passive/.env
 docker/ha-active-active/haproxy/haproxy.cfg
 docker/ha-active-passive/haproxy/haproxy.cfg
 
+# Rendered by setup-node.sh when REPLICATE_CONFIG=true (pins slapd listeners)
+docker/ha-active-active/docker-compose.override.yml
+docker/ha-active-passive/docker-compose.override.yml
+
 # TLS material (generated locally per mode)
 docker/*/certs/*.crt
 docker/*/certs/*.key
