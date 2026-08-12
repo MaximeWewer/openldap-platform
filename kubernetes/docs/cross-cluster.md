@@ -33,6 +33,15 @@ more clusters by giving each one its own `serverIdBase`.
    Provision the same Secret (key `replicator-password`) on every cluster
    via external-secrets — see `values.replication.replicator.existingSecret`.
 
+5. **`cn=config` replication stays inside each cluster.**
+   `replication.replicateConfig.enabled` builds its syncrepl provider list
+   from the in-cluster StatefulSet pods only, never from `externalPeers` —
+   deliberately. `cn=config` carries the per-cluster `serverIdBase` and the
+   per-cluster peer list, so replicating it across clusters would have each
+   cluster overwrite the other's topology. Enable it per cluster if you want
+   ACL/overlay/schema changes to propagate between the pods of that cluster;
+   apply cross-cluster config changes once per cluster.
+
 ## Ordered bootstrap
 
 Bring the clusters up one at a time. Only the first one seeds the

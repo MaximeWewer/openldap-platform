@@ -25,6 +25,10 @@ slappasswd before writing them into cn=config.
 {{- fail (printf "openldap.replicaCount must be >= 2 for mode=multi-master (got %d)" $replicas) -}}
 {{- end -}}
 {{- $ha := ne $mode "standalone" -}}
+{{- $replConfig := and $ha .Values.replication.replicateConfig.enabled -}}
+{{- if and .Values.replication.replicateConfig.enabled (not $ha) -}}
+{{- fail "openldap.replication.replicateConfig.enabled requires mode != standalone — a single node has no peer to replicate cn=config with" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -61,7 +65,7 @@ spec:
         # mismatched .topology-hash on the PVC and rebuilds cn=config with
         # the new peer list (data DB preserved). Enables full-auto scale
         # up/down of the writable pool.
-        checksum/topology: {{ printf "%s|%d|%d|%s|%s" $mode (int .Values.replicaCount) (int .Values.replication.serverIdBase) (join "," .Values.replication.externalPeers) .Values.directory.suffix | sha256sum }}
+        checksum/topology: {{ printf "%s|%d|%d|%s|%s|%v" $mode (int .Values.replicaCount) (int .Values.replication.serverIdBase) (join "," .Values.replication.externalPeers) .Values.directory.suffix .Values.replication.replicateConfig.enabled | sha256sum }}
         {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -152,6 +156,16 @@ spec:
               value: {{ .Values.replication.startTLS | quote }}
             - name: TLS_REQCERT
               value: {{ .Values.replication.tlsReqcert | quote }}
+            - name: REPLICATE_CONFIG
+              value: {{ .Values.replication.replicateConfig.enabled | quote }}
+            {{- if $replConfig }}
+            - name: CONFIG_ADMIN_DN
+              value: {{ .Values.configAdmin.bindDN | quote }}
+            - name: CONFIG_SYNCPROV_CHECKPOINT
+              value: {{ .Values.replication.replicateConfig.checkpoint | quote }}
+            - name: CONFIG_SYNCPROV_SESSIONLOG
+              value: {{ .Values.replication.replicateConfig.sessionLog | quote }}
+            {{- end }}
             {{- end }}
           # Runs as root: apk needs privileges + files are chowned to
           # <OWNER_UID>:<OWNER_GID> at the end so the main container reads them.
@@ -215,7 +229,20 @@ spec:
             - "-d"
             - "0"
             - "-h"
+            {{- if $replConfig }}
+            {{- /*
+              cn=config replication uses the URL form of olcServerID, and slapd
+              only accepts it if one of the listed URLs matches one of its own
+              listeners — `ldap:///` (0.0.0.0) never does. Each pod therefore
+              binds its own FQDN (present in /etc/hosts, no DNS dependency)
+              plus 127.0.0.1 for the metrics sidecar and local tooling.
+              0.0.0.0 is deliberately NOT bound: it would collide with both.
+              $(VAR) is expanded by the kubelet — the image has no shell.
+            */}}
+            - "ldap://$(POD_NAME).$(HEADLESS_SVC).$(POD_NAMESPACE).svc.cluster.local:{{ .Values.service.ldapPort }} ldap://127.0.0.1:{{ .Values.service.ldapPort }}{{ if .Values.tls.enabled }} ldaps://$(POD_NAME).$(HEADLESS_SVC).$(POD_NAMESPACE).svc.cluster.local:{{ .Values.service.ldapsPort }} ldaps://127.0.0.1:{{ .Values.service.ldapsPort }}{{ end }}"
+            {{- else }}
             - "ldap:///{{ if .Values.tls.enabled }} ldaps:///{{ end }}"
+            {{- end }}
             - "-F"
             - "/etc/openldap/slapd.d"
             {{- end }}
@@ -228,9 +255,24 @@ spec:
               containerPort: {{ .Values.service.ldapsPort }}
               protocol: TCP
             {{- end }}
-          {{- with .Values.extraEnv }}
+          {{- if or $replConfig .Values.extraEnv }}
           env:
+            {{- if $replConfig }}
+            # Consumed by $(VAR) expansion in the `-h` argument above.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HEADLESS_SVC
+              value: {{ include "openldap.headlessServiceName" . }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}

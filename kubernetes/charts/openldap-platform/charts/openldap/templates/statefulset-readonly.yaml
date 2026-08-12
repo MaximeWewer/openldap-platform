@@ -55,7 +55,7 @@ spec:
         {{- end }}
         # Force RO pod rollout when the writable-pool topology changes (RO
         # pods consume from writable peers, so any peer-list change matters).
-        checksum/topology: {{ printf "%s|%d|%d|%d|%d|%s|%s" .Values.mode (int .Values.replicaCount) (int .Values.readOnlyReplicas.count) (int .Values.replication.serverIdBase) (int .Values.readOnlyReplicas.serverIdBase) (join "," .Values.replication.externalPeers) .Values.directory.suffix | sha256sum }}
+        checksum/topology: {{ printf "%s|%d|%d|%d|%d|%s|%s|%v" .Values.mode (int .Values.replicaCount) (int .Values.readOnlyReplicas.count) (int .Values.replication.serverIdBase) (int .Values.readOnlyReplicas.serverIdBase) (join "," .Values.replication.externalPeers) .Values.directory.suffix .Values.replication.replicateConfig.enabled | sha256sum }}
         {{- with .Values.readOnlyReplicas.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -137,6 +137,16 @@ spec:
               value: {{ .Values.replication.startTLS | quote }}
             - name: TLS_REQCERT
               value: {{ .Values.replication.tlsReqcert | quote }}
+            - name: REPLICATE_CONFIG
+              value: {{ .Values.replication.replicateConfig.enabled | quote }}
+            {{- if .Values.replication.replicateConfig.enabled }}
+            # RO pods consume the cn=schema subtree ONLY (never the whole
+            # cn=config — they would inherit olcMirrorMode and stop being
+            # read-only). Without it their syncrepl stalls on the first entry
+            # using a runtime-added objectClass.
+            - name: CONFIG_ADMIN_DN
+              value: {{ .Values.configAdmin.bindDN | quote }}
+            {{- end }}
           securityContext:
             runAsUser: 0
             runAsGroup: 0

@@ -14,6 +14,11 @@ Bootstrap ConfigMap — holds:
                               __SERVER_ID_LINE__       (empty in standalone)
                               __MIRRORMODE_LINE__      (empty in standalone)
                               __SYNCREPL_BLOCK__       (empty in standalone)
+                            Plus, only when replication.replicateConfig is on
+                            (HA + writable pods):
+                              __CONFIG_SYNCREPL_BLOCK__
+                              __CONFIG_MIRRORMODE_LINE__
+                              __CONFIG_SYNCPROV_BLOCK__
   * base-data.ldif        — dc=<suffix> + OUs + (HA) replicator service
                             account. Loaded on ordinal 0 only when HA and
                             replication.seedOnOrdinalZeroOnly=true (default).
@@ -104,6 +109,7 @@ data:
       "${READONLY_SERVER_ID_BASE:-100}" \
       "${EXTERNAL_PEERS:-}" \
       "${SUFFIX:-}" \
+      "${REPLICATE_CONFIG:-false}" \
       | sha256sum | cut -d' ' -f1)
 
     RECONCILE_MODE=0
@@ -136,10 +142,23 @@ data:
     CONFIG_HASH=$(slappasswd -s "$(cat /secrets/config-admin-password)")
 
     # -------- HA-specific: server ID + syncrepl block + replicator hash. -----
-    SERVER_ID_LINE=""
+    SERVER_ID_FILE=""
     MIRRORMODE_LINE=""
     SYNCREPL_FILE=""
     REPLICATOR_HASH=""
+    CONFIG_SYNCREPL_FILE=""
+    CONFIG_MIRRORMODE_LINE=""
+    CONFIG_SYNCPROV_FILE=""
+
+    # cn=config replication is writable-pods-only. A read-only consumer that
+    # pulled cn=config would inherit olcMirrorMode: TRUE from the writable
+    # pool and silently stop being read-only.
+    REPLICATE_CONFIG_EFFECTIVE=false
+    if [ "${MODE:-standalone}" != "standalone" ] \
+       && [ "${NODE_ROLE:-writable}" = "writable" ] \
+       && [ "${REPLICATE_CONFIG:-false}" = "true" ]; then
+      REPLICATE_CONFIG_EFFECTIVE=true
+    fi
 
     if [ "${MODE:-standalone}" != "standalone" ]; then
       if [ ! -f /replicator/replicator-password ]; then
@@ -151,9 +170,10 @@ data:
 
       # Read-only consumer pods use a distinct serverIdBase and never accept
       # writes — olcReadOnly: TRUE substitutes olcMirrorMode.
+      SERVER_ID_FILE=$(mktemp)
       if [ "${NODE_ROLE:-writable}" = "readonly" ]; then
         SERVER_ID=$((${READONLY_SERVER_ID_BASE:-100} + ORDINAL))
-        SERVER_ID_LINE="olcServerID: ${SERVER_ID}"
+        echo "olcServerID: ${SERVER_ID}" > "$SERVER_ID_FILE"
         if [ "${READONLY_ENFORCE:-true}" = "true" ]; then
           MIRRORMODE_LINE="olcReadOnly: TRUE"
         else
@@ -161,7 +181,29 @@ data:
         fi
       else
         SERVER_ID=$((${SERVER_ID_BASE:-1} + ORDINAL))
-        SERVER_ID_LINE="olcServerID: ${SERVER_ID}"
+        if [ "${REPLICATE_CONFIG_EFFECTIVE}" = "true" ]; then
+          # URL form, IDENTICAL on every writable pod. Required because the
+          # whole cn=config replicates, root entry included: a single-int
+          # olcServerID would be overwritten by whichever peer wrote last.
+          # Each pod picks its own line by matching the URL against one of its
+          # listeners — which is why the StatefulSet pins slapd's `-h` to this
+          # FQDN instead of `ldap:///` (0.0.0.0 never matches a host-specific
+          # URL). It is ALSO what makes slapd drop the syncrepl entry pointing
+          # at itself (provider URL == own identity URL). Without that match a
+          # node consumes its own config and syncprov answers its own consumer
+          # thread with `(53) Server is unwilling to perform`, stalling the
+          # real consumers.
+          # The pod FQDN is in /etc/hosts, so it resolves without cluster DNS.
+          : > "$SERVER_ID_FILE"
+          i=0
+          while [ "$i" -lt "${REPLICA_COUNT}" ]; do
+            echo "olcServerID: $((${SERVER_ID_BASE:-1} + i)) ldap://${SVC_NAME}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local:${REPLICA_LDAP_PORT}" \
+              >> "$SERVER_ID_FILE"
+            i=$((i + 1))
+          done
+        else
+          echo "olcServerID: ${SERVER_ID}" > "$SERVER_ID_FILE"
+        fi
         MIRRORMODE_LINE="olcMirrorMode: TRUE"
       fi
 
@@ -213,6 +255,97 @@ data:
         RID=$((RID + 1))
       done
       echo "[bootstrap] built $(($RID - 1)) syncrepl providers, serverID=${SERVER_ID}"
+
+      # ---- cn=config replication (writable pods, in-cluster peers only) ----
+      # ONE syncrepl per peer over the WHOLE cn=config. Not several partial
+      # ones with narrower searchbases: syncrepl entries on the same database
+      # share a single contextCSN, so one advancing it makes the others believe
+      # they are current and silently skip changes — measured, the consumer
+      # reports an up-to-date contextCSN while its entries are stale.
+      # Self IS listed: the list must be identical on every pod (it replicates
+      # too), and slapd drops the self entry at runtime by matching the
+      # provider URL against its own URL-form olcServerID.
+      # Deliberately NOT extended to EXTERNAL_PEERS: cn=config carries the
+      # per-cluster serverIdBase and peer list.
+      # Not delta-syncrepl: the accesslog overlay is on {1}mdb only.
+      if [ "${REPLICATE_CONFIG_EFFECTIVE}" = "true" ]; then
+        CONFIG_PW=$(cat /secrets/config-admin-password)
+        CONFIG_SYNCREPL_FILE=$(mktemp)
+        RID=101
+        i=0
+        while [ "$i" -lt "${REPLICA_COUNT}" ]; do
+          uri="ldap://${SVC_NAME}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local:${REPLICA_LDAP_PORT}"
+          EXTRA_TLS=""
+          [ -n "${STARTTLS:-}" ] && EXTRA_TLS="${EXTRA_TLS} starttls=${STARTTLS}"
+          [ -n "${TLS_REQCERT:-}" ] && EXTRA_TLS="${EXTRA_TLS} tls_reqcert=${TLS_REQCERT}"
+          # rid namespace 1xx keeps config rids clear of the mdb rids above.
+          # binddn is the config rootDN: it bypasses the {0}config ACL.
+          cat >> "$CONFIG_SYNCREPL_FILE" <<EOF
+    olcSyncRepl: rid=$(printf '%03d' "$RID") provider=${uri}
+      bindmethod=simple binddn="${CONFIG_ADMIN_DN}"
+      credentials="${CONFIG_PW}"
+      searchbase="cn=config"
+      type=refreshAndPersist retry="${SYNCREPL_RETRY}"
+      timeout=1${EXTRA_TLS}
+    EOF
+          RID=$((RID + 1))
+          i=$((i + 1))
+        done
+        CONFIG_MIRRORMODE_LINE="olcMirrorMode: TRUE"
+        CONFIG_SYNCPROV_FILE=$(mktemp)
+        cat > "$CONFIG_SYNCPROV_FILE" <<EOF
+    dn: olcOverlay=syncprov,olcDatabase={0}config,cn=config
+    objectClass: olcOverlayConfig
+    objectClass: olcSyncProvConfig
+    olcOverlay: syncprov
+    olcSpCheckpoint: ${CONFIG_SYNCPROV_CHECKPOINT}
+    olcSpSessionLog: ${CONFIG_SYNCPROV_SESSIONLOG}
+
+    EOF
+        echo "[bootstrap] cn=config replication ON — $((RID - 101)) providers, URL-form serverID"
+        if [ -n "${EXTERNAL_PEERS:-}" ]; then
+          echo "[bootstrap] NOTE: externalPeers are excluded from cn=config replication by design"
+        fi
+      fi
+
+      # ---- cn=schema slice for read-only consumers -------------------------
+      # A RO replica must NOT consume the whole cn=config: it would inherit the
+      # writable pool's olcMirrorMode/olcServerID and stop being read-only.
+      # But it MUST track the schema: its syncrepl runs with schemachecking=on,
+      # so an entry using an objectClass added at runtime on the writable pool
+      # is rejected — and that rejection STALLS the whole replication stream,
+      # silently, including every later entry.
+      #
+      # So: replicate the cn=schema subtree ONLY. No olcMirrorMode and no
+      # syncprov are added, which leaves {0}config a pure shadow here — local
+      # cn=config writes are refused on a RO pod, which is what we want.
+      # olcServerID stays in the single-int form: the `cn=config` root entry is
+      # outside this searchbase, so nothing overwrites it.
+      if [ "${NODE_ROLE:-writable}" = "readonly" ] && [ "${REPLICATE_CONFIG:-false}" = "true" ]; then
+        CONFIG_PW=$(cat /secrets/config-admin-password)
+        CONFIG_SYNCREPL_FILE=$(mktemp)
+        RID=201
+        i=0
+        while [ "$i" -lt "${REPLICA_COUNT}" ]; do
+          uri="ldap://${SVC_NAME}-${i}.${HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local:${REPLICA_LDAP_PORT}"
+          EXTRA_TLS=""
+          [ -n "${STARTTLS:-}" ] && EXTRA_TLS="${EXTRA_TLS} starttls=${STARTTLS}"
+          [ -n "${TLS_REQCERT:-}" ] && EXTRA_TLS="${EXTRA_TLS} tls_reqcert=${TLS_REQCERT}"
+          # rid namespace 2xx keeps these clear of the mdb (0xx) and full-config
+          # (1xx) rids.
+          cat >> "$CONFIG_SYNCREPL_FILE" <<EOF
+    olcSyncRepl: rid=$(printf '%03d' "$RID") provider=${uri}
+      bindmethod=simple binddn="${CONFIG_ADMIN_DN}"
+      credentials="${CONFIG_PW}"
+      searchbase="cn=schema,cn=config"
+      type=refreshAndPersist retry="${SYNCREPL_RETRY}"
+      timeout=1${EXTRA_TLS}
+    EOF
+          RID=$((RID + 1))
+          i=$((i + 1))
+        done
+        echo "[bootstrap] cn=schema replication ON (read-only consumer) — $((RID - 201)) providers"
+      fi
     fi
 
     mkdir -p "${SLAPD_D}" "${MDB_DIR}" "${ACCESSLOG_DIR}"
@@ -220,33 +353,37 @@ data:
     # Render cn=config with password hashes and HA markers.
     RENDERED_CONFIG=$(mktemp)
     RENDERED_DATA=$(mktemp)
-    trap 'rm -f "${RENDERED_CONFIG}" "${RENDERED_DATA}" "${SYNCREPL_FILE:-}"' EXIT
+    trap 'rm -f "${RENDERED_CONFIG}" "${RENDERED_DATA}" "${SYNCREPL_FILE:-}" "${SERVER_ID_FILE:-}" "${CONFIG_SYNCREPL_FILE:-}" "${CONFIG_SYNCPROV_FILE:-}"' EXIT
 
     # Build a sed script file — safer than shell word-splitting when
-    # substitution values contain spaces (e.g. "olcServerID: 1").
+    # substitution values contain spaces (e.g. "olcMirrorMode: TRUE").
     SED_SCRIPT=$(mktemp)
     {
       printf 's|__ADMIN_PW_HASH__|%s|\n' "${ADMIN_HASH}"
       printf 's|__CONFIG_ADMIN_PW_HASH__|%s|\n' "${CONFIG_HASH}"
-      printf 's|__SERVER_ID_LINE__|%s|\n' "${SERVER_ID_LINE}"
       printf 's|__MIRRORMODE_LINE__|%s|\n' "${MIRRORMODE_LINE}"
+      printf 's|__CONFIG_MIRRORMODE_LINE__|%s|\n' "${CONFIG_MIRRORMODE_LINE}"
     } > "${SED_SCRIPT}"
 
-    # Multi-line SYNCREPL block is inserted via awk (sed multiline is not portable).
-    if [ -n "${SYNCREPL_FILE}" ] && [ -s "${SYNCREPL_FILE}" ]; then
-      awk -v f="${SYNCREPL_FILE}" '
-        /__SYNCREPL_BLOCK__/ {
-          while ((getline line < f) > 0) print line
-          close(f)
-          next
-        }
-        { print }
-      ' /bootstrap/slapd-config.ldif | sed -f "${SED_SCRIPT}" > "${RENDERED_CONFIG}"
-    else
-      { printf '/__SYNCREPL_BLOCK__/d\n'; cat "${SED_SCRIPT}"; } > "${SED_SCRIPT}.full"
-      sed -f "${SED_SCRIPT}.full" /bootstrap/slapd-config.ldif > "${RENDERED_CONFIG}"
-      rm -f "${SED_SCRIPT}.full"
-    fi
+    # Multi-line blocks are inserted via awk (sed multiline is not portable).
+    # A placeholder whose file is unset/empty has its line DELETED, which is
+    # what standalone (no serverID, no syncrepl) and cn=config-replication-off
+    # both want.
+    awk -v sid="${SERVER_ID_FILE}" \
+        -v syn="${SYNCREPL_FILE}" \
+        -v csyn="${CONFIG_SYNCREPL_FILE}" \
+        -v csp="${CONFIG_SYNCPROV_FILE}" '
+      function emit(f,   line) {
+        if (f == "") return
+        while ((getline line < f) > 0) print line
+        close(f)
+      }
+      /__SERVER_ID_LINE__/        { emit(sid);  next }
+      /__SYNCREPL_BLOCK__/        { emit(syn);  next }
+      /__CONFIG_SYNCREPL_BLOCK__/ { emit(csyn); next }
+      /__CONFIG_SYNCPROV_BLOCK__/ { emit(csp);  next }
+      { print }
+    ' /bootstrap/slapd-config.ldif | sed -f "${SED_SCRIPT}" > "${RENDERED_CONFIG}"
     rm -f "${SED_SCRIPT}"
 
     # Custom schemas — append `include:` lines to the cn=schema block right
@@ -388,7 +525,10 @@ data:
     olcRootDN: {{ .Values.configAdmin.bindDN }}
     olcRootPW: __CONFIG_ADMIN_PW_HASH__
     olcAccess: {{ "{" }}0{{ "}" }}to * by dn.exact="{{ .Values.configAdmin.bindDN }}" manage by * none
+    __CONFIG_SYNCREPL_BLOCK__
+    __CONFIG_MIRRORMODE_LINE__
 
+    __CONFIG_SYNCPROV_BLOCK__
     dn: olcDatabase={{ "{" }}1{{ "}" }}mdb,cn=config
     objectClass: olcDatabaseConfig
     objectClass: olcMdbConfig

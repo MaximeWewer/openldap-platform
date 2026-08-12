@@ -51,6 +51,7 @@ Starting overlay if you want to skim before opening the full tables.
 | `openldap.accesslog.ops` | `writes bind` | Drop `bind` for high-traffic setups |
 | `openldap.replication.serverIdBase` | `1` | Distinct per cluster in cross-cluster HA |
 | `openldap.replication.externalPeers` | `[]` | Cross-cluster LDAPS URIs |
+| `openldap.replication.replicateConfig.enabled` | `false` | Replicate `cn=config` (ACLs, overlays, schema, ppolicy) between writable pods. Switches `olcServerID` to the URL form and pins slapd's `-h`. In-cluster peers only — never `externalPeers`. Read-only replicas get the `cn=schema` subtree only (prevents their syncrepl stalling on a runtime schema addition) |
 | `openldap.hpa.enabled` | `false` | HorizontalPodAutoscaler v2 — requires `mode: multi-master` |
 | `openldap.hpa.minReplicas` / `maxReplicas` | `2` / `5` | HPA scale window |
 | `openldap.hpa.metrics` | CPU 70% + mem 80% | autoscaling/v2 metrics[] verbatim; supports Prometheus-adapter |

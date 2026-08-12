@@ -27,6 +27,13 @@ the data database (`mdb`) is preserved.
   `scale` subresource). Bump `openldap.replicaCount` to match the live
   count for that upgrade, or use `helm upgrade --force`. Not a
   chart bug — standard HPA/helm interop.
+- With `replication.replicateConfig.enabled=true`, the peer topology
+  (`olcServerID` URL list + `olcSyncRepl` entries) lives in `cn=config` and
+  therefore replicates. `REPLICATE_CONFIG` is part of the topology hash, so a
+  scale event still restarts every pod and each one rebuilds `cn=config`
+  against the new `REPLICA_COUNT` — the replicated copy converges to the same
+  content. Expect a short window during the rolling restart where pods
+  disagree on the peer list; syncrepl retries until it closes.
 
 ## How full-auto reconcile works (two-part mechanism)
 
