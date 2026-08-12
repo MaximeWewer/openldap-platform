@@ -261,7 +261,7 @@ Kubernetes: `>=1.27.0-0`
 | openldap.replicaCount | int | `1` |  |
 | openldap.replication.externalPeers | list | `[]` |  |
 | openldap.replication.replicateConfig.checkpoint | string | `"100 10"` |  |
-| openldap.replication.replicateConfig.enabled | bool | `false` |  |
+| openldap.replication.replicateConfig.enabled | bool | `true` |  |
 | openldap.replication.replicateConfig.sessionLog | int | `100` |  |
 | openldap.replication.replicator.dn | string | `"cn=replicator,ou=service-accounts"` |  |
 | openldap.replication.replicator.existingSecret | string | `""` |  |

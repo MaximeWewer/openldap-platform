@@ -25,10 +25,12 @@ slappasswd before writing them into cn=config.
 {{- fail (printf "openldap.replicaCount must be >= 2 for mode=multi-master (got %d)" $replicas) -}}
 {{- end -}}
 {{- $ha := ne $mode "standalone" -}}
+{{- /*
+  cn=config replication is on by default but only MEANS anything in HA modes:
+  a standalone node has no peer, so $replConfig is gated on $ha and is simply
+  inert when mode=standalone (no fail - the default must render everywhere).
+*/ -}}
 {{- $replConfig := and $ha .Values.replication.replicateConfig.enabled -}}
-{{- if and .Values.replication.replicateConfig.enabled (not $ha) -}}
-{{- fail "openldap.replication.replicateConfig.enabled requires mode != standalone - a single node has no peer to replicate cn=config with" -}}
-{{- end -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

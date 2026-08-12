@@ -353,11 +353,19 @@ replication:
   # ---------------------------------------------------------------------------
   # cn=config replication.
   #
-  # Off by default only dc=… replicates, so anything living in cn=config
-  # (olcAccess, overlays, schema, ppolicy, indices) stays on the pod that
-  # received the write. The chart's own sync Jobs write cn=config through the
-  # ClusterIP Service, which load-balances: without this, an ACL applied by
-  # `acls.sh` lands on ONE arbitrary pod and the others never see it.
+  # ON by default (safe on Kubernetes: pods bind their own FQDN, so the
+  # URL-form olcServerID matches a listener without any host-networking or
+  # topology change - unlike the Docker setup, where this stays opt-in). Only
+  # takes effect in HA modes (mirror / multi-master); it is inert in
+  # standalone, which has no peer to replicate cn=config with.
+  #
+  # Why it matters: without it, anything living in cn=config (olcAccess,
+  # overlays, schema, ppolicy, indices) stays on the pod that received the
+  # write. The chart's own sync Jobs write cn=config through the ClusterIP
+  # Service, which load-balances: with replication OFF, an ACL applied by
+  # `acls.sh` lands on ONE arbitrary pod and the others never see it -
+  # a failover then serves stale ACLs. Set to false only if you manage
+  # cn=config out-of-band or hit an unusual topology constraint.
   #
   # When enabled, on the WRITABLE StatefulSet only:
   #   - olcServerID switches to the URL form. Mandatory: the `cn=config` entry
@@ -388,7 +396,9 @@ replication:
   # either way functionally inert, but expect it to differ from the local
   # hash after the first sync.
   replicateConfig:
-    enabled: false
+    # ON by default - inert in standalone (gated on mode != standalone), active
+    # in mirror / multi-master.
+    enabled: true
     # syncprov tuning for the {0}config provider overlay.
     checkpoint: "100 10"
     sessionLog: 100

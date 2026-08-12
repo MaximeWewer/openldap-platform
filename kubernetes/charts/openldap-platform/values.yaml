@@ -369,12 +369,15 @@ openldap:
     # Replicate the cn=config database itself between writable pods, so
     # olcAccess / overlays / schema / ppolicy changes propagate instead of
     # staying on whichever pod the ClusterIP Service happened to pick.
+    # ON by default - inert in standalone (gated on mode != standalone), active
+    # in mirror / multi-master. Safe on Kubernetes because pods bind their own
+    # FQDN (URL-form olcServerID matches a listener, no host-networking needed).
     # Switches olcServerID to the URL form and pins slapd's listeners.
     # Read-only replicas get the cn=schema subtree only - without it their
     # syncrepl stalls silently on the first entry using a runtime-added
     # objectClass. See charts/openldap/values.yaml for the full rationale.
     replicateConfig:
-      enabled: false
+      enabled: true
       checkpoint: "100 10"
       sessionLog: 100
 
