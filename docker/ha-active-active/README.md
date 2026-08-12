@@ -107,6 +107,28 @@ By default only `dc=example,dc=org` replicates. Everything that lives in
 the node that received the write, so an ACL added on node 1 is invisible to
 nodes 2 and 3.
 
+### Why this is opt-in here (but on by default on Kubernetes)
+
+Unlike the Helm chart - where `replication.replicateConfig` is **on by
+default** - the Docker setup keeps it **off by default**, because enabling it
+is not a free toggle:
+
+- It requires `network_mode: host` (see below), which recreates the container
+  and changes the host's network posture. You should not impose that on every
+  Docker deployment.
+- The node's identity URL (`olcServerID`) must be an address the container can
+  **bind locally** *and* that matches how peers reach it. On bridge / NAT /
+  cross-datacentre topologies (e.g. peers reached over a public NAT IP that
+  isn't on the host's interfaces), that prerequisite may not hold - and slapd
+  then refuses to start (`no serverID / URL match found`).
+
+On Kubernetes it is safe to default on because a pod always binds its own
+FQDN, so the URL-form `olcServerID` matches a listener with no host-networking
+or topology change. Docker has no such guarantee, so here you opt in **only
+where your topology supports it**. If it doesn't (or you prefer zero network
+change), manage `cn=config` out-of-band instead - apply ACL/overlay/schema
+changes to every node yourself, or with a small reconcile script.
+
 Set `REPLICATE_CONFIG=true` (same value, same `CONFIG_ADMIN_PASSWORD`, on
 **every** node) and re-run `./setup-node.sh --reset`. `setup-node.sh` then:
 

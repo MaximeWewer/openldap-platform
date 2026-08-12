@@ -118,6 +118,21 @@ By default only `dc=example,dc=org` replicates. Everything in `cn=config` -
 `olcAccess`, overlays, schema, ppolicy, indices - stays on the node that
 received the write.
 
+### Why this is opt-in here (but on by default on Kubernetes)
+
+Unlike the Helm chart - where `replication.replicateConfig` is **on by
+default** - the Docker setup keeps it **off by default**, because enabling it
+is not a free toggle: it requires `network_mode: host` (container recreation,
+changed network posture), and the node's identity URL (`olcServerID`) must be
+an address the container can **bind locally** that also matches how peers reach
+it. On bridge / NAT / cross-datacentre topologies (peers reached over a public
+NAT IP absent from the host's interfaces), that prerequisite may not hold and
+slapd refuses to start. On Kubernetes it defaults on because a pod always binds
+its own FQDN, so the URL-form `olcServerID` matches a listener with no
+host-networking or topology change - Docker has no such guarantee. Turn it on
+**only where your topology supports it**; otherwise manage `cn=config`
+out-of-band (apply changes to every node yourself, or with a reconcile script).
+
 Set `REPLICATE_CONFIG=true` (same value, same `CONFIG_ADMIN_PASSWORD`) on
 **every** node and re-run `./setup-node.sh --reset`. Masters get the full
 `cn=config`; consumers (`SERVER_ID >= 3`) get the `cn=schema` subtree only - a
