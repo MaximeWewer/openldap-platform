@@ -69,7 +69,7 @@ Kubernetes: `>=1.27.0-0`
 | cli.resources.limits.memory | string | `"256Mi"` |  |
 | cli.resources.requests.cpu | string | `"50m"` |  |
 | cli.resources.requests.memory | string | `"64Mi"` |  |
-| cli.version | string | `"v2026.7.4"` |  |
+| cli.version | string | `"v2026.7.5"` |  |
 | cli.waitForLdap.intervalSeconds | int | `3` |  |
 | cli.waitForLdap.timeoutSeconds | int | `180` |  |
 | command | list | `[]` |  |

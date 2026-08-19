@@ -571,7 +571,7 @@ cli:
     repository: alpine
     tag: "3.24"
     pullPolicy: IfNotPresent
-  version: "v2026.7.4"
+  version: "v2026.7.5"
   downloadUrl: "https://github.com/maximewewer/openldap-cli/releases/download"
   kubectlVersion: "v1.36.2"
 
@@ -702,8 +702,14 @@ treeGrants: []
 #     - name: app-svc
 #       tree: "ou=users,dc=example,dc=org"
 #       access: read                             # read | write (default: read)
-#       # Optional:
-#       membersOf: admins                        # limit entry rule to group members
+#       # Optional - limit the entry rule to group members. Accepts a single
+#       # group (string) or several (list); with a list the rule fires for a
+#       # member of ANY of them (OR). A list needs CLI >= v2026.7.5.
+#       membersOf: admins                        # one group
+#     - name: multi-svc
+#       tree: "ou=users,dc=example,dc=org"
+#       access: read
+#       membersOf: [admins, ops]                 # OR of several groups (CLI >= v2026.7.5)
 
 # =============================================================================
 # Overlays - openldap-cli config overlay enable/disable (CLI ≥ v2026.7.4)

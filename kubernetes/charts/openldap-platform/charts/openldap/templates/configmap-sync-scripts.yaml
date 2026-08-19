@@ -651,15 +651,27 @@ data:
       TREE=$(jq -r ".[$i].tree" /spec/tree-grants.json)
       [ -n "$TREE" ] && [ "$TREE" != "null" ] || DIE "tree grant ${NAME}: tree required"
       ACCESS=$(jq -r ".[$i].access // \"read\"" /spec/tree-grants.json)
-      MEM=$(jq -r ".[$i].membersOf // empty" /spec/tree-grants.json)
 
       # revoke existing rules for (name, tree) then re-grant.
       LOG "svc revoke ${NAME} --tree ${TREE}"
       openldap-cli svc revoke "$NAME" --tree "$TREE" || true
 
+      # membersOf: accept a single group (string) or several (list) and emit
+      # one --members-of per group. Repeatable since openldap-cli v2026.7.5;
+      # multiple groups are OR'd (member of ANY satisfies the rule). Values may
+      # be group names or DNs, so read line-by-line (never split on ',' / ' ').
+      # A file + `< file` redirect (not a pipe) keeps the while loop in this
+      # shell so the accumulated "$@" survives.
+      jq -r ".[$i].membersOf | if type==\"array\" then .[] elif .==null then empty else . end" \
+        /spec/tree-grants.json > /tmp/tg-mems.txt
       set -- "$NAME" --tree "$TREE" --access "$ACCESS"
-      [ -n "$MEM" ] && set -- "$@" --members-of "$MEM"
-      LOG "svc grant ${NAME} --tree ${TREE} --access ${ACCESS}"
+      MEMCNT=0
+      while IFS= read -r g; do
+        [ -n "$g" ] || continue
+        set -- "$@" --members-of "$g"
+        MEMCNT=$((MEMCNT + 1))
+      done < /tmp/tg-mems.txt
+      LOG "svc grant ${NAME} --tree ${TREE} --access ${ACCESS} (members-of groups: ${MEMCNT})"
       openldap-cli svc grant "$@"
 
       i=$((i + 1))

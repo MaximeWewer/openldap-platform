@@ -130,7 +130,7 @@ survived, or the LDIF dumps are stored offsite).
            args:
            - |
              apk add --no-cache curl ca-certificates >/dev/null 2>&1
-             curl -sL https://github.com/maximewewer/openldap-cli/releases/download/v2026.7.4/openldap-cli_v2026.7.4_linux_amd64.tar.gz \
+             curl -sL https://github.com/maximewewer/openldap-cli/releases/download/v2026.7.5/openldap-cli_v2026.7.5_linux_amd64.tar.gz \
                | tar xz -C /usr/local/bin openldap-cli
              chmod +x /usr/local/bin/openldap-cli
              export LDAP_URL=ldap://ldap-openldap.ldap.svc:389

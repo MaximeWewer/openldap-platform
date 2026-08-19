@@ -118,7 +118,7 @@ Kubernetes: `>=1.27.0-0`
 | openldap.cli.resources.limits.memory | string | `"256Mi"` |  |
 | openldap.cli.resources.requests.cpu | string | `"50m"` |  |
 | openldap.cli.resources.requests.memory | string | `"64Mi"` |  |
-| openldap.cli.version | string | `"v2026.7.4"` |  |
+| openldap.cli.version | string | `"v2026.7.5"` |  |
 | openldap.cli.waitForLdap.intervalSeconds | int | `3` |  |
 | openldap.cli.waitForLdap.timeoutSeconds | int | `180` |  |
 | openldap.command | list | `[]` |  |
