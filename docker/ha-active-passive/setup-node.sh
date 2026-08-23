@@ -24,8 +24,31 @@ set -a; source .env; set +a
 : "${CONFIG_ADMIN_PASSWORD:=adminpasswordconfig}"
 
 IMAGE="cleanstart/openldap:2.6.13"
-LDAP_UID=101
-LDAP_GID=102
+
+# Derive the ldap uid/gid from the image instead of hardcoding them. The
+# cleanstart/openldap tag is mutable and the ldap user's ids have changed
+# between builds (seen as both 100:101 and 101:102). Hardcoding makes the
+# post-slapadd chown mismatch slapd's runtime user (started with -u ldap
+# -g ldap), so the container crashes on the files it cannot read. Read the
+# real ids from the image's /etc/passwd; fall back to 101:102 if unavailable.
+read_ldap_ids() {
+  local cid tmp pw
+  cid=$(docker create "$IMAGE" 2>/dev/null) || return 1
+  tmp=$(mktemp)
+  docker cp "$cid":/etc/passwd "$tmp" >/dev/null 2>&1
+  docker rm -f "$cid" >/dev/null 2>&1 || true
+  pw=$(grep '^ldap:' "$tmp" 2>/dev/null); rm -f "$tmp"
+  [ -n "$pw" ] || return 1
+  LDAP_UID=$(printf '%s' "$pw" | cut -d: -f3)
+  LDAP_GID=$(printf '%s' "$pw" | cut -d: -f4)
+  [ -n "$LDAP_UID" ] && [ -n "$LDAP_GID" ]
+}
+if read_ldap_ids; then
+  echo "Derived ldap uid:gid from ${IMAGE} = ${LDAP_UID}:${LDAP_GID}"
+else
+  LDAP_UID=101; LDAP_GID=102
+  echo "WARNING: could not read ldap uid/gid from ${IMAGE}; falling back to ${LDAP_UID}:${LDAP_GID}" >&2
+fi
 
 IFS=',' read -r -a PEERS <<< "$NODE_URIS"
 NUM_PEERS=${#PEERS[@]}
