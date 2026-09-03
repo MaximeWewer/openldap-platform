@@ -84,7 +84,18 @@ cp .env.example .env  # set SERVER_ID and NODE_URIS
 
 ## Per-VM ports
 
-Same as active-active. HAProxy uses `balance first` instead of `roundrobin`.
+Same as active-active, plus a separate read-only fan-out. HAProxy uses
+`balance first` on the write path instead of `roundrobin`.
+
+| Port | Role |
+|------|------|
+| 1389 / 1636 | Writes - masters only (`SERVER_ID` 1-2), node1 active, node2 backup |
+| 1390 / 1637 | Read-only fan-out - consumers (`SERVER_ID` >= 3), roundrobin. Only bound when the topology has consumers |
+
+Consumers are deliberately kept out of the write pool: they run without
+`olcMirrorMode`, so any write routed to one is refused with
+`shadow context; no update referral`. Send writes to 1389 and read-heavy
+traffic to 1390.
 
 ## Files
 
@@ -95,7 +106,7 @@ User-facing (deploy these on your real hosts):
 | `docker-compose.yml` | openldap + haproxy + (phpldapadmin) |
 | `setup-node.sh` | Role-aware bootstrap (master if SERVER_ID ≤ 2, else consumer) |
 | `init-config/slapd-config.ldif.tmpl` | cn=config template (mirror placeholders) |
-| `haproxy/haproxy.cfg.tmpl` | HAProxy template (`balance first` hardcoded, node1 active, node2+ backup) |
+| `haproxy/haproxy.cfg.tmpl` | HAProxy template (`balance first` on the write path, node1 active, node2 backup; consumers on the read-only backend) |
 | `.env.example` | Per-node config template |
 
 Test scaffolding (under `tests/`):

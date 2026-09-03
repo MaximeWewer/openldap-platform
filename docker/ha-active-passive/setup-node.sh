@@ -301,24 +301,69 @@ docker run --rm --user root \
 
 # === Render haproxy.cfg (balance first: node1 active, node2+ backup) ===
 echo "=== Rendering haproxy.cfg (active/backup LB) ==="
-LDAP_SERVERS=""; LDAPS_SERVERS=""; IDX=0
+# Only SERVER_ID 1-2 are masters, and only they may serve writes. Consumers
+# (SERVER_ID >= 3) are read-only shadows - routing a write to one returns
+# `shadow context; no update referral`, so they get their own read backend on
+# 1390/1637 instead of sitting in the write pool as backups.
+LDAP_SERVERS=""; LDAPS_SERVERS=""
+RO_LDAP_SERVERS=""; RO_LDAPS_SERVERS=""; IDX=0
 for uri in "${PEERS[@]}"; do
   IDX=$((IDX + 1))
   HOSTPORT="${uri#ldap://}"
   HOST="${HOSTPORT%:*}"
-  BACKUP_FLAG=""
-  [ "$IDX" -gt 1 ] && BACKUP_FLAG=" backup"
-  LDAP_SERVERS+="    server node${IDX} ${HOST}:389 check inter 5s rise 2 fall 3${BACKUP_FLAG}"$'\n'
-  LDAPS_SERVERS+="    server node${IDX}_s ${HOST}:636 check inter 5s rise 2 fall 3${BACKUP_FLAG}"$'\n'
+  if [ "$IDX" -le 2 ]; then
+    BACKUP_FLAG=""
+    [ "$IDX" -gt 1 ] && BACKUP_FLAG=" backup"
+    LDAP_SERVERS+="    server node${IDX} ${HOST}:389 check inter 5s rise 2 fall 3${BACKUP_FLAG}"$'\n'
+    LDAPS_SERVERS+="    server node${IDX}_s ${HOST}:636 check inter 5s rise 2 fall 3${BACKUP_FLAG}"$'\n'
+  else
+    RO_LDAP_SERVERS+="    server node${IDX} ${HOST}:389 check inter 5s rise 2 fall 3"$'\n'
+    RO_LDAPS_SERVERS+="    server node${IDX}_s ${HOST}:636 check inter 5s rise 2 fall 3"$'\n'
+  fi
 done
 LDAP_SERVERS="${LDAP_SERVERS%$'\n'}"
 LDAPS_SERVERS="${LDAPS_SERVERS%$'\n'}"
+RO_LDAP_SERVERS="${RO_LDAP_SERVERS%$'\n'}"
+RO_LDAPS_SERVERS="${RO_LDAPS_SERVERS%$'\n'}"
 
-export LDAP_SERVERS LDAPS_SERVERS HAPROXY_STATS_USER HAPROXY_STATS_PASSWORD
+# Read-only fan-out section - emitted only when consumers actually exist.
+READONLY_SECTION=""
+if [ -n "$RO_LDAP_SERVERS" ]; then
+  echo "  Read-only LB:  ldap://<node-ip>:1390 (consumers, roundrobin)"
+  READONLY_SECTION="
+# === LDAP (plaintext) - READ-ONLY fan-out ===
+# Consumers (SERVER_ID >= 3). Point read-heavy clients here; writes must go
+# to 1389.
+frontend ldap_ro_front
+    bind *:1390
+    mode tcp
+    default_backend ldap_ro_back
+
+backend ldap_ro_back
+    mode tcp
+    balance roundrobin
+    option ldap-check
+${RO_LDAP_SERVERS}
+
+# === LDAPS (TLS passthrough) - READ-ONLY fan-out ===
+frontend ldaps_ro_front
+    bind *:1637
+    mode tcp
+    default_backend ldaps_ro_back
+
+backend ldaps_ro_back
+    mode tcp
+    balance roundrobin
+    option tcp-check
+    tcp-check connect
+${RO_LDAPS_SERVERS}"
+fi
+
+export LDAP_SERVERS LDAPS_SERVERS READONLY_SECTION HAPROXY_STATS_USER HAPROXY_STATS_PASSWORD
 python3 - > haproxy/haproxy.cfg <<'PYEOF'
 import os
 with open("haproxy/haproxy.cfg.tmpl") as f: tpl=f.read()
-for k in ("HAPROXY_STATS_USER","HAPROXY_STATS_PASSWORD","LDAP_SERVERS","LDAPS_SERVERS"):
+for k in ("HAPROXY_STATS_USER","HAPROXY_STATS_PASSWORD","LDAP_SERVERS","LDAPS_SERVERS","READONLY_SECTION"):
     tpl=tpl.replace(f"@@{k}@@", os.environ.get(k,""))
 print(tpl)
 PYEOF
@@ -375,5 +420,5 @@ done
 echo ""
 echo "Node $SERVER_ID up. Role=$ROLE"
 echo "  Direct LDAP:     ldap://<node-ip>:389"
-echo "  HAProxy LDAP LB: ldap://<node-ip>:1389  (first: node1 active, node2+ backup)"
+echo "  HAProxy LDAP LB: ldap://<node-ip>:1389  (writes: node1 active, node2 backup)"
 echo "  HAProxy stats:   http://<node-ip>:8404  ($HAPROXY_STATS_USER/$HAPROXY_STATS_PASSWORD)"

@@ -36,8 +36,10 @@ services:
     hostname: haproxy-${SERVER_ID:-1}
     restart: always
     ports:
-      - "1389:1389" # client-facing LB port (LDAP)
-      - "1636:1636" # client-facing LB port (LDAPS, if TLS enabled)
+      - "1389:1389" # client-facing LB port (LDAP, writes - masters only)
+      - "1636:1636" # client-facing LB port (LDAPS, writes - masters only)
+      - "1390:1390" # read-only fan-out (consumers, SERVER_ID >= 3)
+      - "1637:1637" # read-only fan-out (LDAPS)
       - "8404:8404" # HAProxy stats
     volumes:
       - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro

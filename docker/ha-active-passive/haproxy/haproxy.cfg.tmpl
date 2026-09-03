@@ -22,7 +22,11 @@ frontend stats
     stats refresh 10s
     stats auth @@HAPROXY_STATS_USER@@:@@HAPROXY_STATS_PASSWORD@@
 
-# === LDAP (plaintext) ===
+# === LDAP (plaintext) - WRITE path ===
+# Masters only (SERVER_ID 1-2). Consumers are deliberately absent: they run
+# without olcMirrorMode, so slapd answers any write on them with
+# `shadow context; no update referral`. Listing them here as backups meant a
+# double-master outage failed over onto a node that cannot accept writes.
 frontend ldap_front
     bind *:1389
     mode tcp
@@ -34,7 +38,7 @@ backend ldap_back
     option ldap-check
 @@LDAP_SERVERS@@
 
-# === LDAPS (TLS passthrough) ===
+# === LDAPS (TLS passthrough) - WRITE path ===
 frontend ldaps_front
     bind *:1636
     mode tcp
@@ -46,3 +50,4 @@ backend ldaps_back
     option tcp-check
     tcp-check connect
 @@LDAPS_SERVERS@@
+@@READONLY_SECTION@@
