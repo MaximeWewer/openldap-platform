@@ -64,12 +64,14 @@ Kubernetes: `>=1.27.0-0`
 | cli.image.pullPolicy | string | `"IfNotPresent"` |  |
 | cli.image.repository | string | `"alpine"` |  |
 | cli.image.tag | string | `"3.24"` |  |
+| cli.kubectlSha256 | string | `""` |  |
 | cli.kubectlVersion | string | `"v1.36.2"` |  |
 | cli.resources.limits.cpu | string | `"500m"` |  |
 | cli.resources.limits.memory | string | `"256Mi"` |  |
 | cli.resources.requests.cpu | string | `"50m"` |  |
 | cli.resources.requests.memory | string | `"64Mi"` |  |
-| cli.version | string | `"v2026.7.5"` |  |
+| cli.sha256 | string | `""` |  |
+| cli.version | string | `"v2026.9.1"` |  |
 | cli.waitForLdap.intervalSeconds | int | `3` |  |
 | cli.waitForLdap.timeoutSeconds | int | `180` |  |
 | command | list | `[]` |  |
@@ -140,7 +142,7 @@ Kubernetes: `>=1.27.0-0`
 | monitoring.exporter.extraEnv | list | `[]` |  |
 | monitoring.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | monitoring.exporter.image.repository | string | `"ghcr.io/maximewewer/openldap_prometheus_exporter"` |  |
-| monitoring.exporter.image.tag | string | `"v2026.7.1"` |  |
+| monitoring.exporter.image.tag | string | `"2026.7.1"` |  |
 | monitoring.exporter.port | int | `9330` |  |
 | monitoring.exporter.resources.limits.cpu | string | `"200m"` |  |
 | monitoring.exporter.resources.limits.memory | string | `"128Mi"` |  |
@@ -155,6 +157,7 @@ Kubernetes: `>=1.27.0-0`
 | monitoring.serviceMonitor.metricRelabelings | list | `[]` |  |
 | monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | monitoring.serviceMonitor.scrapeTimeout | string | `"10s"` |  |
+| networkPolicy.allowInitEgress | bool | `true` |  |
 | networkPolicy.allowedFrom | list | `[]` |  |
 | networkPolicy.enabled | bool | `false` |  |
 | networkPolicy.externalPeerCIDRs | list | `[]` |  |
@@ -195,6 +198,9 @@ Kubernetes: `>=1.27.0-0`
 | readOnlyReplicas.persistence.size | string | `""` |  |
 | readOnlyReplicas.persistence.storageClass | string | `""` |  |
 | readOnlyReplicas.podAnnotations | object | `{}` |  |
+| readOnlyReplicas.podDisruptionBudget.maxUnavailable | string | `""` |  |
+| readOnlyReplicas.podDisruptionBudget.minAvailable | string | `""` |  |
+| readOnlyReplicas.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | readOnlyReplicas.podLabels | object | `{}` |  |
 | readOnlyReplicas.priorityClassName | string | `""` |  |
 | readOnlyReplicas.resources | object | `{}` |  |

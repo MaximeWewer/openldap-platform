@@ -57,9 +57,9 @@ Kubernetes: `>=1.27.0-0`
 
 | Repository | Name | Version |
 |------------|------|---------|
-| file://charts/openldap | openldap | 2026.7.1 |
-| file://charts/phpldapadmin | phpldapadmin | 2026.7.1 |
-| file://charts/self-service-password | self-service-password | 2026.7.1 |
+| file://charts/openldap | openldap | 2026.9.1 |
+| file://charts/phpldapadmin | phpldapadmin | 2026.9.1 |
+| file://charts/self-service-password | self-service-password | 2026.9.1 |
 
 ## Values
 
@@ -118,7 +118,7 @@ Kubernetes: `>=1.27.0-0`
 | openldap.cli.resources.limits.memory | string | `"256Mi"` |  |
 | openldap.cli.resources.requests.cpu | string | `"50m"` |  |
 | openldap.cli.resources.requests.memory | string | `"64Mi"` |  |
-| openldap.cli.version | string | `"v2026.7.5"` |  |
+| openldap.cli.version | string | `"v2026.9.1"` |  |
 | openldap.cli.waitForLdap.intervalSeconds | int | `3` |  |
 | openldap.cli.waitForLdap.timeoutSeconds | int | `180` |  |
 | openldap.command | list | `[]` |  |
@@ -190,7 +190,7 @@ Kubernetes: `>=1.27.0-0`
 | openldap.monitoring.exporter.extraEnv | list | `[]` |  |
 | openldap.monitoring.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | openldap.monitoring.exporter.image.repository | string | `"ghcr.io/maximewewer/openldap_prometheus_exporter"` |  |
-| openldap.monitoring.exporter.image.tag | string | `"v2026.7.1"` |  |
+| openldap.monitoring.exporter.image.tag | string | `"2026.7.1"` |  |
 | openldap.monitoring.exporter.port | int | `9330` |  |
 | openldap.monitoring.exporter.resources.limits.cpu | string | `"200m"` |  |
 | openldap.monitoring.exporter.resources.limits.memory | string | `"128Mi"` |  |
