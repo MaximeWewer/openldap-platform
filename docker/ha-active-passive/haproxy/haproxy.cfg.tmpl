@@ -8,9 +8,17 @@ defaults
     mode    tcp
     option  tcplog
     option  dontlognull
+    # LDAP clients hold pooled connections open and idle between operations,
+    # and syncrepl consumers keep a refreshAndPersist session open for good.
+    # At 1m both were being cut mid-flight and had to rebind constantly, which
+    # shows up as connection churn and spurious bind load on the servers.
     timeout connect 5s
-    timeout client  1m
-    timeout server  1m
+    timeout client  10m
+    timeout server  10m
+    # Keepalives on both sides so a genuinely dead peer is still detected well
+    # before the (now much longer) idle timeout fires.
+    option  clitcpka
+    option  srvtcpka
     timeout check   3s
 
 # === Stats UI (HTTP) ===
