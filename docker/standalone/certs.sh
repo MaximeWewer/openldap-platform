@@ -72,6 +72,32 @@ done
 log() { [ "$QUIET" = "yes" ] || echo "$@"; }
 action() { echo "$@"; }   # always printed (renewal/error events)
 
+# === ldap uid/gid, derived from the image ===
+# Same reason as setup.sh / setup-node.sh: the cleanstart/openldap tag is
+# mutable and the ldap user's ids have moved between builds (100:101 and
+# 101:102 both seen). Hardcoding them here makes the key unreadable to slapd
+# after a rebuild, and slapd aborts at startup on the TLS material it cannot
+# open. Read the real ids from the image; fall back to 101:102 if unavailable.
+IMAGE="cleanstart/openldap:2.6.13"
+read_ldap_ids() {
+  local cid tmp pw
+  cid=$(docker create "$IMAGE" 2>/dev/null) || return 1
+  tmp=$(mktemp)
+  docker cp "$cid":/etc/passwd "$tmp" >/dev/null 2>&1
+  docker rm -f "$cid" >/dev/null 2>&1 || true
+  pw=$(grep '^ldap:' "$tmp" 2>/dev/null); rm -f "$tmp"
+  [ -n "$pw" ] || return 1
+  LDAP_UID=$(printf '%s' "$pw" | cut -d: -f3)
+  LDAP_GID=$(printf '%s' "$pw" | cut -d: -f4)
+  [ -n "$LDAP_UID" ] && [ -n "$LDAP_GID" ]
+}
+if read_ldap_ids; then
+  log "Derived ldap uid:gid from ${IMAGE} = ${LDAP_UID}:${LDAP_GID}"
+else
+  LDAP_UID=101; LDAP_GID=102
+  log "WARNING: could not read ldap uid/gid from ${IMAGE}; falling back to ${LDAP_UID}:${LDAP_GID}"
+fi
+
 CA_KEY_PATH="$CERT_DIR/openldapCA.key"
 CA_CERT_PATH="$CERT_DIR/openldapCA.crt"
 LDAP_KEY_PATH="$CERT_DIR/openldap.key"
@@ -155,15 +181,16 @@ else
   log "LDAP certificate still valid (notAfter: $EXPIRY) - no action."
 fi
 
-# === Permissions for the openldap container (uid 101, gid 102) ===
+# === Permissions for the openldap container ===
 # Try passwordless sudo, then direct chown (root), else best-effort.
+OWNER="${LDAP_UID}:${LDAP_GID}"
 if [ "$(id -u)" -eq 0 ]; then
-  chown -R 101:102 "$CERT_DIR"
+  chown -R "$OWNER" "$CERT_DIR"
 elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-  sudo chown -R 101:102 "$CERT_DIR"
+  sudo chown -R "$OWNER" "$CERT_DIR"
 else
-  chown -R 101:102 "$CERT_DIR" 2>/dev/null \
-    || log "Note: could not chown $CERT_DIR to 101:102 (need root). Run 'sudo chown -R 101:102 $CERT_DIR' manually."
+  chown -R "$OWNER" "$CERT_DIR" 2>/dev/null \
+    || log "Note: could not chown $CERT_DIR to $OWNER (need root). Run 'sudo chown -R $OWNER $CERT_DIR' manually."
 fi
 
 # === Cleanup ===
