@@ -24,6 +24,11 @@ spec:
   selector:
     matchLabels:
       {{- include "openldap.selectorLabels" . | nindent 6 }}
+      # Scoped to the WRITABLE pool. Without the component label this budget
+      # also matched the read-only pods, so `minAvailable` (sized from
+      # replicaCount) could be satisfied by RO pods alone and a node drain was
+      # free to evict every writable pod at once.
+      app.kubernetes.io/component: server
   {{- if and $pdb.minAvailable (not $pdb.maxUnavailable) }}
   minAvailable: {{ $pdb.minAvailable }}
   {{- else if $pdb.maxUnavailable }}
@@ -35,4 +40,33 @@ spec:
   {{- with $pdb.unhealthyPodEvictionPolicy }}
   unhealthyPodEvictionPolicy: {{ . }}
   {{- end }}
+{{- if gt (int .Values.readOnlyReplicas.count) 0 }}
+---
+{{- $ropdb := .Values.readOnlyReplicas.podDisruptionBudget }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "openldap.readonlyFullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openldap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: readonly
+spec:
+  selector:
+    matchLabels:
+      {{- include "openldap.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: readonly
+  {{- if and $ropdb.minAvailable (not $ropdb.maxUnavailable) }}
+  minAvailable: {{ $ropdb.minAvailable }}
+  {{- else if $ropdb.maxUnavailable }}
+  maxUnavailable: {{ $ropdb.maxUnavailable }}
+  {{- else }}
+  # A single RO replica cannot have a meaningful budget - minAvailable 0 keeps
+  # drains unblocked; beyond that keep N-1 serving reads.
+  minAvailable: {{ sub (int .Values.readOnlyReplicas.count) 1 }}
+  {{- end }}
+  {{- with $ropdb.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
+  {{- end }}
+{{- end }}
 {{- end }}

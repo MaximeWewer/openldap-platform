@@ -462,6 +462,14 @@ readOnlyReplicas:
     type: ClusterIP
     annotations: {}
 
+  # Budget for the RO pool. The writable pool has its own (podDisruptionBudget
+  # above); the two are separate so a drain cannot satisfy the writable budget
+  # with surviving RO pods. Same knobs, sized from readOnlyReplicas.count.
+  podDisruptionBudget:
+    minAvailable: ""
+    maxUnavailable: ""
+    unhealthyPodEvictionPolicy: ""
+
 # =============================================================================
 # Autoscaling - HorizontalPodAutoscaler v2 targeting the writable STS
 # =============================================================================
