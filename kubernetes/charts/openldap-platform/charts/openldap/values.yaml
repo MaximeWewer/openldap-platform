@@ -1059,6 +1059,19 @@ networkPolicy:
   # Empty = same namespace as the release.
   prometheusNamespace: ""
 
+  # Egress on TCP 443 for the bootstrap initContainer.
+  #
+  # The default initImage is a bare alpine, so the initContainer installs the
+  # slapd tools with `apk add` on every first boot (and, in multi-master, calls
+  # the API server to read the live StatefulSet replica count). Init containers
+  # run in the pod's network namespace, so the server NetworkPolicy applies to
+  # them too: with this off and no prebuilt initImage, `apk add` cannot reach
+  # the Alpine CDN and the pod never becomes Ready.
+  #
+  # Set to false once initImage points at an image that already ships
+  # slapadd/slappasswd - then the pods need no outbound access at all.
+  allowInitEgress: true
+
   # Egress to external LDAPS peers (replication.externalPeers). When empty
   # and replication is enabled, the chart opens TCP 636 to 0.0.0.0/0
   # (cross-cluster peers are usually unpredictable). Tighten with CIDRs

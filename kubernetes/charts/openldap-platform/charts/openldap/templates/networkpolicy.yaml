@@ -143,6 +143,22 @@ spec:
           port: {{ $ldapsPort }}
     {{- end }}
 
+    # Bootstrap initContainer reach-out. The default initImage is a bare
+    # alpine, so the initContainer `apk add`s the slapd tools on every first
+    # boot, and in multi-master it also queries the API server for the live
+    # STS replica count. Init containers share the pod's network namespace, so
+    # THIS policy applies to them: without the rule below the bootstrap cannot
+    # resolve its packages and the pod never becomes Ready. Set
+    # networkPolicy.allowInitEgress=false once initImage carries the tools.
+    {{- if .Values.networkPolicy.allowInitEgress }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+
     # Free-form extras.
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
@@ -227,6 +243,22 @@ spec:
         - protocol: TCP
           port: {{ $ldapsPort }}
         {{- end }}
+
+    # Bootstrap initContainer reach-out. The default initImage is a bare
+    # alpine, so the initContainer `apk add`s the slapd tools on every first
+    # boot, and in multi-master it also queries the API server for the live
+    # STS replica count. Init containers share the pod's network namespace, so
+    # THIS policy applies to them: without the rule below the bootstrap cannot
+    # resolve its packages and the pod never becomes Ready. Set
+    # networkPolicy.allowInitEgress=false once initImage carries the tools.
+    {{- if .Values.networkPolicy.allowInitEgress }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
