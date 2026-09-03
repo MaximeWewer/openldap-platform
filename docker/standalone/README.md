@@ -30,7 +30,7 @@ bash setup.sh --reset
 | `docker-compose.yml` | OpenLDAP + phpLDAPadmin + SSP |
 | `setup.sh` | Bootstrap (`slapadd` cn=config + data, fix perms, `docker compose up`) |
 | `init-config/slapd-config.ldif` | Full `cn=config` (modules, schemas, ACLs, overlays, accesslog) |
-| `ssp.conf.php` | Self Service Password configuration |
+| `ssp.conf.php.example` | Self Service Password configuration template - `setup.sh` renders it to `ssp.conf.php` (gitignored) with a random `$keyphrase` |
 | `data/` | Persistent OpenLDAP data (`slapd.d`, MDB, accesslog) - gitignored |
 
 Shared with other modes (parent directory):

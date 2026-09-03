@@ -49,6 +49,28 @@ VOLUMES=(
 )
 
 # === Check for clean state ===
+# slapadd loads entries straight into the mdb backend, bypassing the ppolicy
+# overlay - so olcPPolicyHashCleartext never sees these writes and any cleartext
+# userPassword in the seed LDIFs lands in the directory verbatim. Hash them here
+# instead. Values already carrying a {SCHEME} prefix, or base64 (::), pass
+# through untouched, so this stays idempotent and safe over custom LDIFs.
+hash_ldif_passwords() {
+  local in="$1" out="$2" line pw
+  : > "$out"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "userPassword: {"*|"userPassword:: "*)
+        printf '%s\n' "$line" >> "$out" ;;
+      "userPassword: "*)
+        pw=${line#userPassword: }
+        printf 'userPassword: %s\n' \
+          "$(docker run --rm --entrypoint slappasswd "$IMAGE" -s "$pw")" >> "$out" ;;
+      *)
+        printf '%s\n' "$line" >> "$out" ;;
+    esac
+  done < "$in"
+}
+
 if [ -d "$SLAPD_DIR" ] && [ "$(ls -A $SLAPD_DIR 2>/dev/null)" ]; then
   if [[ "${1:-}" == "--reset" ]]; then
     echo "Resetting existing data..."
@@ -87,7 +109,11 @@ trap 'rm -rf "$TMP_DIR"' EXIT
     echo ""
     echo ""
   done
-} > "$TMP_DIR/all-data.ldif"
+} > "$TMP_DIR/all-data.raw.ldif"
+
+echo "=== Hashing seeded passwords ==="
+hash_ldif_passwords "$TMP_DIR/all-data.raw.ldif" "$TMP_DIR/all-data.ldif"
+rm -f "$TMP_DIR/all-data.raw.ldif"
 
 docker run --rm --user root \
   "${VOLUMES[@]}" \
@@ -102,6 +128,19 @@ docker run --rm --user root \
   alpine:latest sh -c "chown -R ${LDAP_UID}:${LDAP_GID} /etc/openldap/slapd.d /var/lib/openldap/openldap-data /var/lib/openldap/accesslog-data"
 
 # === Step 4: Start containers ===
+# Self Service Password config. Rendered once, then left alone - the keyphrase
+# encrypts reset tokens and session cookies, so regenerating it on every run
+# would invalidate every token already in flight.
+if [ ! -f ./ssp.conf.php ]; then
+  echo "=== Rendering ssp.conf.php (random keyphrase) ==="
+  SSP_KEYPHRASE=$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-32)
+  sed "s|__SSP_KEYPHRASE__|${SSP_KEYPHRASE}|" \
+    ./ssp.conf.php.example > ./ssp.conf.php
+  chmod 600 ./ssp.conf.php
+else
+  echo "=== ssp.conf.php already present - keeping its keyphrase ==="
+fi
+
 echo "=== Starting containers ==="
 docker compose up -d
 

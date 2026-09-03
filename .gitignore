@@ -5,6 +5,10 @@ docker/standalone/data/
 docker/ha-active-active/data/
 docker/ha-active-passive/data/
 
+# Rendered by setup.sh from ssp.conf.php.example (carries a per-deployment
+# keyphrase used to encrypt SSP reset tokens)
+docker/standalone/ssp.conf.php
+
 # Per-mode env + rendered HAProxy config
 docker/ha-active-active/.env
 docker/ha-active-passive/.env

@@ -64,6 +64,28 @@ echo "  ServerID:   $SERVER_ID / $NUM_PEERS"
 echo "  Peers:      $NODE_URIS"
 echo "  cn=config replication: $REPLICATE_CONFIG"
 
+# slapadd loads entries straight into the mdb backend, bypassing the ppolicy
+# overlay - so olcPPolicyHashCleartext never sees these writes and any cleartext
+# userPassword in the seed LDIFs lands in the directory verbatim. Hash them here
+# instead. Values already carrying a {SCHEME} prefix, or base64 (::), pass
+# through untouched, so this stays idempotent and safe over custom LDIFs.
+hash_ldif_passwords() {
+  local in="$1" out="$2" line pw
+  : > "$out"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "userPassword: {"*|"userPassword:: "*)
+        printf '%s\n' "$line" >> "$out" ;;
+      "userPassword: "*)
+        pw=${line#userPassword: }
+        printf 'userPassword: %s\n' \
+          "$(docker run --rm --entrypoint slappasswd "$IMAGE" -s "$pw")" >> "$out" ;;
+      *)
+        printf '%s\n' "$line" >> "$out" ;;
+    esac
+  done < "$in"
+}
+
 # === Reset check ===
 SLAPD_DIR="./data/slapd.d"
 if [ -d "$SLAPD_DIR" ] && [ "$(ls -A $SLAPD_DIR 2>/dev/null)" ]; then
@@ -231,7 +253,11 @@ if [ "$SERVER_ID" = "1" ]; then
       sed 's/\r$//' "$ldif"
       echo ""; echo ""
     done
-  } > "$TMP_DATA/all-data.ldif"
+  } > "$TMP_DATA/all-data.raw.ldif"
+
+  echo "=== Hashing seeded passwords ==="
+  hash_ldif_passwords "$TMP_DATA/all-data.raw.ldif" "$TMP_DATA/all-data.ldif"
+  rm -f "$TMP_DATA/all-data.raw.ldif"
 
   docker run --rm --user root \
     -v "$(pwd)/data/slapd.d:/etc/openldap/slapd.d" \
