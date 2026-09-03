@@ -72,17 +72,89 @@ jobs:
 
       - name: Render (fail-fast on runtime template errors)
         run: |
-          # Rendering the umbrella with a couple of the heavier feature flags
-          # on catches template errors that plain `helm lint` misses.
-          helm template test ${CHART_DIR} \
-            --set openldap.mode=multi-master \
-            --set openldap.replicaCount=2 \
-            --set openldap.hpa.enabled=true \
-            --set 'openldap.scaleSchedule[0].name=biz' \
-            --set 'openldap.scaleSchedule[0].schedule=0 8 * * 1-5' \
-            --set 'openldap.scaleSchedule[0].minReplicas=2' \
-            --set 'openldap.scaleSchedule[0].maxReplicas=4' \
-            > /dev/null
+          # `helm lint` only exercises the default values, so every optional
+          # path stayed unrendered until someone deployed it. Walk the modes,
+          # both HA shapes, all three TLS backends, the RO pool, the ephemeral
+          # path and the sync surface. A single render on any of these is what
+          # catches a template that references a volume it never declares.
+          fail=0
+          render() {
+            name=$1; shift
+            if helm template test ${CHART_DIR} "$@" > /dev/null 2>/tmp/render.err; then
+              echo "ok    $name"
+            else
+              echo "FAIL  $name"; sed -n '1,3p' /tmp/render.err; fail=1
+            fi
+          }
+
+          render standalone
+          render standalone-nopersist   --set openldap.persistence.enabled=false
+          render mirror                 --set openldap.mode=mirror --set openldap.replicaCount=2
+          render multi-master           --set openldap.mode=multi-master --set openldap.replicaCount=3
+          render no-replicate-config    --set openldap.mode=multi-master --set openldap.replicaCount=3 \
+                                        --set openldap.replication.replicateConfig.enabled=false
+          render readonly-pool          --set openldap.mode=mirror --set openldap.replicaCount=2 \
+                                        --set openldap.readOnlyReplicas.count=2
+          render tls-cert-manager       --set openldap.tls.enabled=true \
+                                        --set openldap.tls.certManager.issuerRef.name=ci-issuer
+          render tls-job                --set openldap.tls.enabled=true --set openldap.tls.backend=job
+          render tls-provided           --set openldap.tls.enabled=true --set openldap.tls.backend=provided \
+                                        --set openldap.tls.provided.secretName=ci-tls
+          render monitoring             --set openldap.monitoring.enabled=true \
+                                        --set openldap.monitoring.serviceMonitor.enabled=true \
+                                        --set openldap.monitoring.prometheusRule.enabled=true
+          render networkpolicy          --set openldap.mode=mirror --set openldap.replicaCount=2 \
+                                        --set openldap.networkPolicy.enabled=true
+          render subcharts-ui           --set phpldapadmin.enabled=true \
+                                        --set self-service-password.enabled=true
+          render hpa-and-schedule       --set openldap.mode=multi-master \
+                                        --set openldap.replicaCount=2 \
+                                        --set openldap.hpa.enabled=true \
+                                        --set 'openldap.scaleSchedule[0].name=biz' \
+                                        --set 'openldap.scaleSchedule[0].schedule=0 8 * * 1-5' \
+                                        --set 'openldap.scaleSchedule[0].minReplicas=2' \
+                                        --set 'openldap.scaleSchedule[0].maxReplicas=4'
+
+          exit $fail
+
+      - name: Check every volumeMount resolves to a declared volume
+        run: |
+          # A subPath mount naming a volume that no longer exists renders fine
+          # and is only rejected by the API server at apply time. Catch it here.
+          python3 - <<'EOF'
+          import subprocess, sys, yaml
+          cases = {
+            "default": [],
+            "no-persistence": ["--set", "openldap.persistence.enabled=false"],
+            "readonly-pool": ["--set", "openldap.mode=mirror",
+                              "--set", "openldap.replicaCount=2",
+                              "--set", "openldap.readOnlyReplicas.count=2"],
+          }
+          rc = 0
+          for name, extra in cases.items():
+              out = subprocess.run(
+                  ["helm", "template", "test", "kubernetes/charts/openldap-platform"] + extra,
+                  capture_output=True, text=True)
+              if out.returncode:
+                  print(f"FAIL  {name}: render error"); rc = 1; continue
+              for doc in yaml.safe_load_all(out.stdout):
+                  if not doc or doc.get("kind") not in ("StatefulSet", "Deployment", "Job", "CronJob"):
+                      continue
+                  spec = doc["spec"].get("template", doc["spec"]).get("spec")
+                  if spec is None:
+                      spec = doc["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+                  declared = {v["name"] for v in spec.get("volumes", [])}
+                  declared |= {v["metadata"]["name"]
+                               for v in doc["spec"].get("volumeClaimTemplates", [])}
+                  for c in spec.get("containers", []) + spec.get("initContainers", []):
+                      for m in c.get("volumeMounts", []):
+                          if m["name"] not in declared:
+                              print(f"FAIL  {name}: {doc['metadata']['name']}/{c['name']} "
+                                    f"mounts undeclared volume {m['name']!r}")
+                              rc = 1
+              print(f"ok    {name}")
+          sys.exit(rc)
+          EOF
 
       - name: Login to GitHub Container Registry
         run: |
