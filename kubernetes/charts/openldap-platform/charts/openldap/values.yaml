@@ -583,6 +583,14 @@ cli:
   downloadUrl: "https://github.com/maximewewer/openldap-cli/releases/download"
   kubectlVersion: "v1.36.2"
 
+  # Integrity of the two downloaded binaries. Left empty, each is checked
+  # against the checksum file its project publishes beside the artefact
+  # (openldap-cli: checksums.txt, kubectl: kubectl.sha256) - a mismatch fails
+  # the Job instead of running the binary. Pin the digests here to bind a
+  # specific build and stop trusting the checksum endpoint too.
+  sha256: ""            # sha256 of openldap-cli_<version>_linux_amd64.tar.gz
+  kubectlSha256: ""     # sha256 of the kubectl binary
+
   # Wait for LDAP to be reachable before running sync scripts (Job startup).
   waitForLdap:
     timeoutSeconds: 180

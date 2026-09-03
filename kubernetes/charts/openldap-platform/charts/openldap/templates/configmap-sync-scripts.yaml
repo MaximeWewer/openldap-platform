@@ -51,13 +51,40 @@ data:
         LOG "apk add: transient failure (try ${APK_TRIES}/5), retrying in 5s"
         sleep 5
       done
+      # Both binaries land in $PATH and then bind to the directory as admin, so
+      # neither is fetched unverified. `cli.sha256` / `cli.kubectlSha256` pin an
+      # exact digest when set; otherwise verify against the checksum file each
+      # project publishes next to the artefact.
       TARBALL="openldap-cli_${CLI_VERSION}_linux_amd64.tar.gz"
       curl --retry 3 --retry-delay 3 -fsSL "${CLI_DOWNLOAD_URL}/${CLI_VERSION}/${TARBALL}" -o /tmp/cli.tgz
+      if [ -n "${CLI_SHA256:-}" ]; then
+        CLI_WANT="${CLI_SHA256}"
+      else
+        curl --retry 3 --retry-delay 3 -fsSL "${CLI_DOWNLOAD_URL}/${CLI_VERSION}/checksums.txt" -o /tmp/cli.sums \
+          || DIE "cannot fetch checksums.txt for openldap-cli ${CLI_VERSION} - pin cli.sha256 to install anyway"
+        CLI_WANT=$(awk -v f="${TARBALL}" '$2 == f || $2 == "*" f { print $1; exit }' /tmp/cli.sums)
+        [ -n "${CLI_WANT}" ] || DIE "${TARBALL} absent from checksums.txt"
+      fi
+      CLI_GOT=$(sha256sum /tmp/cli.tgz | cut -d' ' -f1)
+      [ "${CLI_GOT}" = "${CLI_WANT}" ] \
+        || DIE "openldap-cli checksum mismatch (want ${CLI_WANT}, got ${CLI_GOT})"
       tar -xzf /tmp/cli.tgz -C /usr/local/bin openldap-cli
       chmod +x /usr/local/bin/openldap-cli
-      curl --retry 3 --retry-delay 3 -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl
-      chmod +x /usr/local/bin/kubectl
-      rm -f /tmp/cli.tgz
+
+      curl --retry 3 --retry-delay 3 -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /tmp/kubectl
+      if [ -n "${KUBECTL_SHA256:-}" ]; then
+        KUBECTL_WANT="${KUBECTL_SHA256}"
+      else
+        KUBECTL_WANT=$(curl --retry 3 --retry-delay 3 -fsSL \
+          "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" \
+          || DIE "cannot fetch kubectl.sha256 for ${KUBECTL_VERSION} - pin cli.kubectlSha256 to install anyway")
+      fi
+      KUBECTL_GOT=$(sha256sum /tmp/kubectl | cut -d' ' -f1)
+      [ "${KUBECTL_GOT}" = "${KUBECTL_WANT}" ] \
+        || DIE "kubectl checksum mismatch (want ${KUBECTL_WANT}, got ${KUBECTL_GOT})"
+      install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+
+      rm -f /tmp/cli.tgz /tmp/cli.sums /tmp/kubectl
     fi
 
     # Prefer flags + env over the config file (LDAP_* env vars are honoured
