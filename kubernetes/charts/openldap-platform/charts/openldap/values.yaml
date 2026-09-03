@@ -591,6 +591,19 @@ cli:
   sha256: ""            # sha256 of openldap-cli_<version>_linux_amd64.tar.gz
   kubectlSha256: ""     # sha256 of the kubectl binary
 
+  # Hand the CLI the PATH of each mounted password Secret instead of the value.
+  #
+  # The admin and config-admin Secrets are already mounted as files under
+  # /secrets, so with this on the passwords never enter the Jobs' environment
+  # (readable via /proc/<pid>/environ) nor a command line (/proc/<pid>/cmdline).
+  # It switches the sync scripts to LDAP_BIND_PW_FILE / LDAP_CONFIG_BIND_PW_FILE
+  # and to `user add --password-stdin`.
+  #
+  # Requires openldap-cli >= v2026.9.1, which is where those three landed. Set
+  # to false if you pin cli.version to an older release - an older binary
+  # ignores the *_FILE variables and would bind with an empty password.
+  passwordFiles: true
+
   # Wait for LDAP to be reachable before running sync scripts (Job startup).
   waitForLdap:
     timeoutSeconds: 180

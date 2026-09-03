@@ -63,6 +63,8 @@ spec:
                   value: {{ .Values.cli.downloadUrl | quote }}
                 - name: KUBECTL_VERSION
                   value: {{ .Values.cli.kubectlVersion | quote }}
+                - name: PASSWORD_FILES
+                  value: {{ .Values.cli.passwordFiles | quote }}
                 - name: WAIT_TIMEOUT_SECONDS
                   value: {{ .Values.cli.waitForLdap.timeoutSeconds | quote }}
                 - name: WAIT_INTERVAL_SECONDS

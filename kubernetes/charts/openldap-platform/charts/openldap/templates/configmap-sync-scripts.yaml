@@ -39,7 +39,16 @@ data:
     : "${LDAP_MAIL_DOMAIN:?}"; : "${CLI_VERSION:?}"; : "${CLI_DOWNLOAD_URL:?}"
     : "${KUBECTL_VERSION:?}"
     [ -f /secrets/admin-password ] || DIE "admin password missing at /secrets/admin-password"
-    LDAP_BIND_PW="$(cat /secrets/admin-password)"; export LDAP_BIND_PW
+    # The Secret is already mounted as a file, so with PASSWORD_FILES on we hand
+    # the CLI the path and the password never enters the environment - env is
+    # readable through /proc/<pid>/environ by anything sharing the pod. Falls
+    # back to the env var for CLI builds older than v2026.9.1, which is where
+    # LDAP_BIND_PW_FILE landed.
+    if [ "${PASSWORD_FILES:-false}" = "true" ]; then
+      LDAP_BIND_PW_FILE=/secrets/admin-password; export LDAP_BIND_PW_FILE
+    else
+      LDAP_BIND_PW="$(cat /secrets/admin-password)"; export LDAP_BIND_PW
+    fi
 
     if ! command -v openldap-cli >/dev/null 2>&1; then
       LOG "Installing tooling (apk + openldap-cli ${CLI_VERSION} + kubectl ${KUBECTL_VERSION})"
@@ -162,8 +171,14 @@ data:
       [ -f /secrets/config-admin-password ] \
         || DIE "config admin password missing at /secrets/config-admin-password"
       LDAP_CONFIG_BIND_DN="${LDAP_CONFIG_BIND_DN:-cn=adminconfig,cn=config}"
-      LDAP_CONFIG_BIND_PW="$(cat /secrets/config-admin-password)"
-      export LDAP_CONFIG_BIND_DN LDAP_CONFIG_BIND_PW
+      export LDAP_CONFIG_BIND_DN
+      if [ "${PASSWORD_FILES:-false}" = "true" ]; then
+        LDAP_CONFIG_BIND_PW_FILE=/secrets/config-admin-password
+        export LDAP_CONFIG_BIND_PW_FILE
+      else
+        LDAP_CONFIG_BIND_PW="$(cat /secrets/config-admin-password)"
+        export LDAP_CONFIG_BIND_PW
+      fi
     }
 
     # -------------------------------------------------------------------------
@@ -297,7 +312,14 @@ data:
         fi
 
         # Build `--set k=v` pairs - repeated flag, space-separated args.
-        set -- "$UID_VAL" --password "$PW"
+        # --password puts the secret on the command line, where any process in
+        # the pod can read it from /proc/<pid>/cmdline; --password-stdin (CLI
+        # v2026.9.1+) pipes it instead.
+        if [ "${PASSWORD_FILES:-false}" = "true" ]; then
+          set -- "$UID_VAL" --password-stdin
+        else
+          set -- "$UID_VAL" --password "$PW"
+        fi
         [ -n "$GIVEN" ]   && set -- "$@" --set "givenName=$GIVEN"
         [ -n "$SN" ]      && set -- "$@" --set "sn=$SN"
         [ -n "$MAIL" ]    && set -- "$@" --set "mail=$MAIL"
@@ -305,7 +327,11 @@ data:
         for kv in $EXTRA_KV; do
           set -- "$@" --set "$kv"
         done
-        openldap-cli user add "$@"
+        if [ "${PASSWORD_FILES:-false}" = "true" ]; then
+          printf '%s' "$PW" | openldap-cli user add "$@"
+        else
+          openldap-cli user add "$@"
+        fi
 
         # Persist password ONLY when the chart owns it (no existingSecret).
         if [ -z "$EXISTING_SECRET" ]; then
@@ -460,9 +486,8 @@ data:
 
     LOG "backup config -> /backup/${CONFIG_FILENAME}"
     # config backup requires the cn=config admin - inject its creds temporarily.
-    LDAP_CONFIG_BIND_DN="${LDAP_CONFIG_BIND_DN:-cn=adminconfig,cn=config}" \
-    LDAP_CONFIG_BIND_PW="$(cat /secrets/config-admin-password)" \
-      openldap-cli backup config /backup/"${CONFIG_FILENAME}"
+    load_config_bind
+    openldap-cli backup config /backup/"${CONFIG_FILENAME}"
 
     LOG "pruning /backup for files older than ${RETENTION_DAYS} days"
     find /backup -type f \
@@ -487,8 +512,7 @@ data:
     [ "${DRY_RUN:-false}" = "true" ] && ARGS="${ARGS} --dry-run"
 
     # The purge writes cn=config; use the config-admin credentials.
-    export LDAP_CONFIG_BIND_DN="${LDAP_CONFIG_BIND_DN:-cn=adminconfig,cn=config}"
-    export LDAP_CONFIG_BIND_PW="$(cat /secrets/config-admin-password)"
+    load_config_bind
 
     LOG "ops accesslog-purge ${ARGS}"
     # shellcheck disable=SC2086

@@ -66,6 +66,7 @@ Kubernetes: `>=1.27.0-0`
 | cli.image.tag | string | `"3.24"` |  |
 | cli.kubectlSha256 | string | `""` |  |
 | cli.kubectlVersion | string | `"v1.36.2"` |  |
+| cli.passwordFiles | bool | `true` |  |
 | cli.resources.limits.cpu | string | `"500m"` |  |
 | cli.resources.limits.memory | string | `"256Mi"` |  |
 | cli.resources.requests.cpu | string | `"50m"` |  |

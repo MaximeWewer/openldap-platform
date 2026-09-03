@@ -69,9 +69,21 @@ Both hold across every 2.6 release.
 | `openldap-cli` | v2026.9.1 | `openldap.cli.version` - pinned per release for reproducibility. |
 | `kubectl` | v1.36.2 | `openldap.cli.kubectlVersion` - used by sync/backup/tls Jobs for Secret CRUD + STS rollout. |
 
+Both downloads are checksum-verified before use: against the `checksums.txt` /
+`kubectl.sha256` each project publishes, or against `openldap.cli.sha256` /
+`openldap.cli.kubectlSha256` when you pin the digests yourself.
+
+`openldap.cli.passwordFiles` (default `true`) passes the admin and config-admin
+passwords to the CLI as file paths (`LDAP_BIND_PW_FILE`,
+`LDAP_CONFIG_BIND_PW_FILE`) and creates users with `--password-stdin`, so no
+password reaches a Job's environment or command line. Those three landed in
+**openldap-cli v2026.9.1**: if you pin `openldap.cli.version` to anything older,
+set `passwordFiles: false` as well, or the older binary ignores the `*_FILE`
+variables and binds with an empty password.
+
 ## Prometheus exporter
 
-- Image: `ghcr.io/maximewewer/openldap_prometheus_exporter:v2026.7.1`
+- Image: `ghcr.io/maximewewer/openldap_prometheus_exporter:2026.7.1`
   (pin a tag in prod). Exposes port 9330.
 - Binds as `cn=adminconfig,cn=config`.
 

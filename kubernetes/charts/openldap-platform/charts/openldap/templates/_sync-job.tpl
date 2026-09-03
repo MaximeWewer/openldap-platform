@@ -83,6 +83,8 @@ spec:
               value: {{ $ctx.Values.cli.sha256 | quote }}
             - name: KUBECTL_SHA256
               value: {{ $ctx.Values.cli.kubectlSha256 | quote }}
+            - name: PASSWORD_FILES
+              value: {{ $ctx.Values.cli.passwordFiles | quote }}
             - name: WAIT_TIMEOUT_SECONDS
               value: {{ $ctx.Values.cli.waitForLdap.timeoutSeconds | quote }}
             - name: WAIT_INTERVAL_SECONDS
