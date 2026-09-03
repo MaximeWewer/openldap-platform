@@ -412,6 +412,15 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 16Mi
+        {{- if not .Values.persistence.enabled }}
+        # No PVC: the three subPath mounts still need a `data` volume to exist,
+        # otherwise the StatefulSet is rejected outright ("volumeMounts[0].name:
+        # Not found: data"). Ephemeral - the directory is wiped with the pod and
+        # the bootstrap reseeds cn=config on every restart, so this is for
+        # throwaway/CI runs only.
+        - name: data
+          emptyDir: {}
+        {{- end }}
         {{- if .Values.tls.enabled }}
         - name: tls
           secret:
