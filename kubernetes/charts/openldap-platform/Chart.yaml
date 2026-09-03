@@ -61,7 +61,7 @@ annotations:
     - name: self-service-password
       image: ltbproject/self-service-password:1.8.1
     - name: openldap-exporter
-      image: ghcr.io/maximewewer/openldap_prometheus_exporter:v2026.7.1
+      image: ghcr.io/maximewewer/openldap_prometheus_exporter:2026.7.1
   artifacthub.io/recommendations: |
     - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
     - url: https://artifacthub.io/packages/helm/external-secrets-operator/external-secrets
