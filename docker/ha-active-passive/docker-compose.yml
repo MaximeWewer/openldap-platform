@@ -124,7 +124,10 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - APP_KEY=base64:QyPrQb0gZEn+9kkBfBXzc2Io8JH6ajsiSvWJCgIfeMg=
+      # Laravel signs sessions and encrypts cookies with this. A value shared
+      # by every deployment is a real secret, not a placeholder - the setup
+      # script generates one per deployment into .env (gitignored).
+      - APP_KEY=${PHPLDAPADMIN_APP_KEY:?run setup.sh/setup-node.sh first - it generates PHPLDAPADMIN_APP_KEY into .env}
       - APP_TIMEZONE=Europe/Paris
       - APP_URL=http://localhost:8080
       - LDAP_HOST=haproxy

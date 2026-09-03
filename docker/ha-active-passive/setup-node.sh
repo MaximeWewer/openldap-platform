@@ -399,6 +399,18 @@ else
 fi
 
 # === Start containers ===
+# phpLDAPadmin's Laravel APP_KEY. Generated once per deployment into .env
+# (compose reads that file automatically) rather than shipped as a literal in
+# the compose file, where every install would share the same session/cookie key.
+ensure_app_key() {
+  if [ -f .env ] && grep -q '^PHPLDAPADMIN_APP_KEY=.\+' .env; then
+    return 0
+  fi
+  echo "=== Generating PHPLDAPADMIN_APP_KEY into .env ==="
+  printf 'PHPLDAPADMIN_APP_KEY=base64:%s\n' "$(head -c 32 /dev/urandom | base64)" >> .env
+}
+ensure_app_key
+
 echo "=== Starting containers ==="
 
 # Self Service Password config. Rendered once, then left alone - the keyphrase

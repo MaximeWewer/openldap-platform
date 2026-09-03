@@ -12,6 +12,7 @@ docker/ha-active-active/ssp.conf.php
 docker/ha-active-passive/ssp.conf.php
 
 # Per-mode env + rendered HAProxy config
+docker/standalone/.env
 docker/ha-active-active/.env
 docker/ha-active-passive/.env
 docker/ha-active-active/haproxy/haproxy.cfg
