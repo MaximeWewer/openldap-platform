@@ -83,7 +83,7 @@ variables and binds with an empty password.
 
 ## Prometheus exporter
 
-- Image: `ghcr.io/maximewewer/openldap_prometheus_exporter:2026.7.1`
+- Image: `ghcr.io/maximewewer/openldap_prometheus_exporter:2026.9.1`
   (pin a tag in prod). Exposes port 9330.
 - Binds as `cn=adminconfig,cn=config`.
 

@@ -143,7 +143,7 @@ Kubernetes: `>=1.27.0-0`
 | monitoring.exporter.extraEnv | list | `[]` |  |
 | monitoring.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | monitoring.exporter.image.repository | string | `"ghcr.io/maximewewer/openldap_prometheus_exporter"` |  |
-| monitoring.exporter.image.tag | string | `"2026.7.1"` |  |
+| monitoring.exporter.image.tag | string | `"2026.9.1"` |  |
 | monitoring.exporter.port | int | `9330` |  |
 | monitoring.exporter.resources.limits.cpu | string | `"200m"` |  |
 | monitoring.exporter.resources.limits.memory | string | `"128Mi"` |  |

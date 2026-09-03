@@ -190,7 +190,7 @@ Kubernetes: `>=1.27.0-0`
 | openldap.monitoring.exporter.extraEnv | list | `[]` |  |
 | openldap.monitoring.exporter.image.pullPolicy | string | `"IfNotPresent"` |  |
 | openldap.monitoring.exporter.image.repository | string | `"ghcr.io/maximewewer/openldap_prometheus_exporter"` |  |
-| openldap.monitoring.exporter.image.tag | string | `"2026.7.1"` |  |
+| openldap.monitoring.exporter.image.tag | string | `"2026.9.1"` |  |
 | openldap.monitoring.exporter.port | int | `9330` |  |
 | openldap.monitoring.exporter.resources.limits.cpu | string | `"200m"` |  |
 | openldap.monitoring.exporter.resources.limits.memory | string | `"128Mi"` |  |

@@ -146,7 +146,7 @@ services:
   # ENABLE_EXPORTER=true). Binds as the cn=config admin because the monitor
   # database's ACL grants read to that DN only.
   openldap-exporter:
-    image: ghcr.io/maximewewer/openldap_prometheus_exporter:2026.7.1
+    image: ghcr.io/maximewewer/openldap_prometheus_exporter:2026.9.1
     container_name: openldap-exporter
     hostname: openldap-exporter
     restart: always
