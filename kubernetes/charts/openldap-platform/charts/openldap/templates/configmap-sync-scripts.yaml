@@ -147,9 +147,15 @@ data:
     STATE_CM_NAME="${RELEASE_FULLNAME}-sync-state"
 
     state_get() {
-      # $1 = data key; prints the JSON body (or "[]" if absent)
-      kubectl -n "${RELEASE_NAMESPACE}" get configmap "${STATE_CM_NAME}" \
-        -o "jsonpath={.data.$1}" 2>/dev/null | { read -r v; printf '%s' "${v:-[]}"; }
+      # $1 = data key; prints the JSON body verbatim (or "[]" when absent).
+      # Deliberately NOT `read -r`: the stored body can span several lines and
+      # `read` returns only the first one ("["), which every drift filter below
+      # then fails to parse - and their `|| echo []` fallback turns that into a
+      # silent "nothing was ever applied", so removals are never revoked.
+      _body=$(kubectl -n "${RELEASE_NAMESPACE}" get configmap "${STATE_CM_NAME}" \
+        -o "jsonpath={.data.$1}" 2>/dev/null || true)
+      [ -n "${_body}" ] || _body="[]"
+      printf '%s' "${_body}"
     }
 
     state_put() {
@@ -483,7 +489,7 @@ data:
     state_get overlays > "$PREV"
 
     DECLARED=/tmp/declared-overlays.json
-    jq '[.[] | {name: .name, database: (.database // "")}]' /spec/overlays.json > "$DECLARED"
+    jq -c '[.[] | {name: .name, database: (.database // "")}]' /spec/overlays.json > "$DECLARED"
 
     i=0
     while [ "$i" -lt "$COUNT" ]; do
@@ -519,7 +525,7 @@ data:
     LOG "checking drift for removed overlays"
     REMOVED=$(jq -c --slurpfile decl "$DECLARED" \
       '[.[] as $p | $decl[0] | map(.name == $p.name and .database == $p.database) | any | not | select(.) | $p]' \
-      "$PREV" 2>/dev/null || echo '[]')
+      "$PREV" || echo '[]')
     echo "$REMOVED" | jq -c '.[]?' | while read -r item; do
       RN=$(printf '%s' "$item" | jq -r .name)
       RDB=$(printf '%s' "$item" | jq -r '.database // empty')
@@ -557,7 +563,7 @@ data:
 
     # Declared identity = (database, grantee-kind, grantee-name).
     DECLARED=/tmp/declared-acls.json
-    jq --arg ddb "$DEFAULT_DB" '[.[] | {
+    jq -c --arg ddb "$DEFAULT_DB" '[.[] | {
       name: .name,
       database: (.database // $ddb),
       kind: (if .group then "group" else "dn" end),
@@ -610,7 +616,7 @@ data:
     REMOVED=$(jq -c --slurpfile decl "$DECLARED" '
       [.[] as $p | ($decl[0] | map(.database == $p.database and .kind == $p.kind and .grantee == $p.grantee) | any) as $found
         | if $found then empty else $p end]
-    ' "$PREV" 2>/dev/null || echo '[]')
+    ' "$PREV" || echo '[]')
     echo "$REMOVED" | jq -c '.[]?' | while read -r item; do
       RDB=$(printf '%s' "$item" | jq -r .database)
       RK=$(printf '%s' "$item" | jq -r .kind)
@@ -642,7 +648,7 @@ data:
     state_get tree-grants > "$PREV"
 
     DECLARED=/tmp/declared-tree-grants.json
-    jq '[.[] | {name: .name, tree: .tree}]' /spec/tree-grants.json > "$DECLARED"
+    jq -c '[.[] | {name: .name, tree: .tree}]' /spec/tree-grants.json > "$DECLARED"
 
     i=0
     while [ "$i" -lt "$COUNT" ]; do
@@ -681,7 +687,7 @@ data:
     REMOVED=$(jq -c --slurpfile decl "$DECLARED" '
       [.[] as $p | ($decl[0] | map(.name == $p.name and .tree == $p.tree) | any) as $found
         | if $found then empty else $p end]
-    ' "$PREV" 2>/dev/null || echo '[]')
+    ' "$PREV" || echo '[]')
     echo "$REMOVED" | jq -c '.[]?' | while read -r item; do
       RN=$(printf '%s' "$item" | jq -r .name)
       RT=$(printf '%s' "$item" | jq -r .tree)
