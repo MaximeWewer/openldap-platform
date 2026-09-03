@@ -16,6 +16,43 @@ services:
     ports:
       - "389:389"
       - "636:636"
+    healthcheck:
+      # Exec form, no shell: the image is distroless. ldapsearch on the root
+      # DSE is the cheapest proof that slapd is actually answering, not just
+      # that the process is up.
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://127.0.0.1:389", "-b", "", "-s", "base", "namingContexts"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # slapd binds privileged 389 (and 636 with TLS).
+      - NET_BIND_SERVICE
+      # The image's entrypoint starts slapd as root with `-u ldap -g ldap`, so
+      # it drops privileges itself. Without these two, setgroups() fails with
+      # "Could not set the group access (gid) list" and slapd exits at boot.
+      - SETUID
+      - SETGID
+    tmpfs:
+      # Only writable path outside the data volumes - slapd drops its pid and
+      # args files here. Matches the Kubernetes chart's emptyDir.
+      # mode=1777 (sticky, like /tmp) rather than uid=/gid=: slapd runs as the
+      # image's ldap user, whose ids move between builds of this mutable tag,
+      # and hardcoding them here is exactly the bug fixed in setup.sh/certs.sh.
+      - /run/openldap:size=16m,mode=1777
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+        reservations:
+          cpus: "0.25"
+          memory: 512m
     volumes:
       - ./data/slapd.d:/etc/openldap/slapd.d
       - ./data/openldap-data:/var/lib/openldap/openldap-data
@@ -35,6 +72,16 @@ services:
     container_name: haproxy-ldap
     hostname: haproxy-${SERVER_ID:-1}
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+        reservations:
+          cpus: "0.05"
+          memory: 64m
     ports:
       - "1389:1389" # client-facing LB port (LDAP)
       - "1636:1636" # client-facing LB port (LDAPS, if TLS enabled)
@@ -44,7 +91,8 @@ services:
     networks:
       - ldap-ha
     depends_on:
-      - openldap
+      openldap:
+        condition: service_healthy
     logging:
       driver: json-file
       options:
@@ -56,6 +104,16 @@ services:
     container_name: phpldapadmin
     hostname: phpldapadmin
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+        reservations:
+          cpus: "0.05"
+          memory: 64m
     # Opt-in only: setup-node.sh passes `--profile ui` when ENABLE_PHPLDAPADMIN
     # is true. Without this key the service carries no profile, so compose
     # starts it unconditionally - on every node, whatever the flag says.
@@ -78,7 +136,8 @@ services:
     networks:
       - ldap-ha
     depends_on:
-      - haproxy
+      haproxy:
+        condition: service_started
     logging:
       driver: json-file
       options:
@@ -89,10 +148,20 @@ services:
   # ENABLE_EXPORTER=true). Binds as the cn=config admin because the monitor
   # database's ACL grants read to that DN only.
   openldap-exporter:
-    image: ghcr.io/maximewewer/openldap_prometheus_exporter:v2026.7.1
+    image: ghcr.io/maximewewer/openldap_prometheus_exporter:2026.7.1
     container_name: openldap-exporter
     hostname: openldap-exporter-${SERVER_ID:-1}
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+        reservations:
+          cpus: "0.02"
+          memory: 32m
     profiles:
       - metrics
     ports:
@@ -104,7 +173,8 @@ services:
       - LDAP_SERVER_NAME=openldap-${SERVER_ID:-1}
       - LISTEN_ADDRESS=:9330
     depends_on:
-      - openldap
+      openldap:
+        condition: service_healthy
     networks:
       - ldap-ha
     logging:
@@ -120,6 +190,16 @@ services:
     container_name: selfservice-password
     hostname: selfservice-password
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+        reservations:
+          cpus: "0.05"
+          memory: 64m
     profiles:
       - ui
     ports:
@@ -127,7 +207,8 @@ services:
     volumes:
       - ./ssp.conf.php:/var/www/conf/config.inc.local.php
     depends_on:
-      - haproxy
+      haproxy:
+        condition: service_started
     networks:
       - ldap-ha
     logging:
