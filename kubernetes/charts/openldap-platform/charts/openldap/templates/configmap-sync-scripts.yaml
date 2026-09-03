@@ -327,7 +327,7 @@ data:
     LOG "checking drift - onUserRemove=${ON_USER_REMOVE}"
     KNOWN=$(kubectl -n "${RELEASE_NAMESPACE}" get secrets \
               -l "openldap.platform/release=${RELEASE_NAME},app.kubernetes.io/component=user-credentials" \
-              -o jsonpath='{range .items[*]}{.metadata.labels.openldap\.stack/user}{"\n"}{end}' \
+              -o jsonpath='{range .items[*]}{.metadata.labels.openldap\.platform/user}{"\n"}{end}' \
               2>/dev/null | sort -u)
     for uid in $KNOWN; do
       if ! grep -Fxq "$uid" "$DECLARED"; then
