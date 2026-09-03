@@ -33,30 +33,55 @@ metadata:
     {{- include "openldap.labels" . | nindent 4 }}
     app.kubernetes.io/component: sync
 rules:
+  # Secrets stay namespace-wide, and that is forced by what the scripts do:
+  #   * `create` and `list` take no resourceNames - `list` is how drift finds
+  #     orphaned `<release>-openldap-user-*` Secrets, whose uids are by
+  #     definition no longer in values and so cannot be enumerated here;
+  #   * `get` must reach any name, because users may point `existingSecret` at
+  #     an arbitrary Secret in the namespace.
+  # `delete` is the one verb that can be dropped, and it is: only
+  # onUserRemove=delete ever removes a Secret.
   - apiGroups: [""]
     resources: [secrets]
-    verbs: [get, list, create, update, patch, delete]
+    verbs: [get, list, create, update, patch{{ if eq .Values.onUserRemove "delete" }}, delete{{ end }}]
   - apiGroups: [""]
     resources: [pods]
     verbs: [get, list]
   {{- if or .Values.acls .Values.treeGrants .Values.overlays }}
   # State ConfigMap `<release>-openldap-sync-state` tracks acls / tree-grants /
   # overlays across upgrades so drift removal knows what was previously applied.
+  # Exactly one object, with a name known at render time - so name it, rather
+  # than handing the Jobs every ConfigMap in the namespace.
   - apiGroups: [""]
     resources: [configmaps]
-    verbs: [get, list, create, update, patch]
+    resourceNames: [{{ include "openldap.fullname" . }}-sync-state]
+    verbs: [get, create, patch]
+  # `create` above is only authorized because a resourceNames rule cannot cover
+  # it; the state ConfigMap does not exist on first install.
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
   {{- end }}
   {{- if or (and .Values.tls.enabled (eq .Values.tls.backend "job") .Values.tls.job.rollingRestartOnRenew) $needScaleWatcher }}
-  # TLS renew CronJob triggers `kubectl rollout restart` on the STS.
-  # Scale-watcher Deployment watches spec.replicas + patches on change.
+  # TLS renew CronJob triggers `kubectl rollout restart` on the STS; the
+  # scale-watcher Deployment reads spec.replicas and patches on change. Both
+  # address the StatefulSets by exact name, and neither lists or watches, so
+  # scope to those names and drop the collection verbs.
   - apiGroups: [apps]
     resources: [statefulsets]
-    verbs: [get, list, watch, patch]
+    resourceNames:
+      - {{ include "openldap.fullname" . }}
+      {{- if gt (int .Values.readOnlyReplicas.count) 0 }}
+      - {{ include "openldap.readonlyFullname" . }}
+      {{- end }}
+    verbs: [get, patch]
   {{- end }}
   {{- if and .Values.scaleSchedule .Values.hpa.enabled }}
-  # scaleSchedule CronJobs adjust HPA min/max at scheduled times.
+  # scaleSchedule CronJobs adjust HPA min/max at scheduled times - one HPA,
+  # named by the chart.
   - apiGroups: [autoscaling]
     resources: [horizontalpodautoscalers]
+    resourceNames: [{{ include "openldap.fullname" . }}]
     verbs: [get, patch]
   {{- end }}
 ---
