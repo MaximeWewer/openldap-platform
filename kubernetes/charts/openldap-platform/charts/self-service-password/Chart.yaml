@@ -5,7 +5,7 @@ description: |
   Config file (config.inc.local.php) rendered from values; binds against
   the sibling openldap subchart's Service by default.
 type: application
-version: 2026.7.1
+version: 2026.9.1
 appVersion: "1.8.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif

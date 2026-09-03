@@ -5,7 +5,7 @@ description: |
   suffix/OU/admin bootstrap, and hooks for downstream sync jobs backed by
   openldap-cli.
 type: application
-version: 2026.7.1
+version: 2026.9.1
 appVersion: "2.6.13"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif

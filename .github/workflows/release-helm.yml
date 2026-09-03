@@ -57,7 +57,11 @@ jobs:
 
       - name: Update chart dependencies
         run: |
+          # Helm PREFERS charts/*.tgz over the sibling source directories, so a
+          # stale archive silently shadows every edit. Rebuild from scratch.
+          rm -f ${CHART_DIR}/charts/*.tgz
           helm dependency update ${CHART_DIR}
+          make -C kubernetes dep-check
 
       - name: Lint (fail-fast on template / values issues)
         run: |
