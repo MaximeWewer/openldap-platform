@@ -56,6 +56,11 @@ services:
     container_name: phpldapadmin
     hostname: phpldapadmin
     restart: always
+    # Opt-in only: setup-node.sh passes `--profile ui` when ENABLE_PHPLDAPADMIN
+    # is true. Without this key the service carries no profile, so compose
+    # starts it unconditionally - on every node, whatever the flag says.
+    profiles:
+      - ui
     ports:
       - "8080:8080"
     environment:
