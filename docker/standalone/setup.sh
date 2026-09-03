@@ -74,7 +74,7 @@ hash_ldif_passwords() {
 if [ -d "$SLAPD_DIR" ] && [ "$(ls -A $SLAPD_DIR 2>/dev/null)" ]; then
   if [[ "${1:-}" == "--reset" ]]; then
     echo "Resetting existing data..."
-    docker compose down 2>/dev/null || true
+    docker compose --profile metrics down 2>/dev/null || true
     docker run --rm -v "$(pwd)/data:/data" alpine:latest sh -c "rm -rf /data/slapd.d/* /data/openldap-data/* /data/accesslog-data/*"
   else
     echo "Error: $SLAPD_DIR is not empty."
@@ -142,7 +142,11 @@ else
 fi
 
 echo "=== Starting containers ==="
-docker compose up -d
+PROFILES=()
+if [ "${ENABLE_EXPORTER:-false}" = "true" ]; then
+  PROFILES+=(--profile metrics)
+fi
+docker compose "${PROFILES[@]}" up -d
 
 echo "Waiting for OpenLDAP to start..."
 for i in $(seq 1 30); do

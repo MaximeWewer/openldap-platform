@@ -73,6 +73,8 @@ Always start node 1 first - peers need it to load the initial dataset.
 | 1636  | HAProxy LDAPS frontend |
 | 8404  | HAProxy stats UI (admin/admin) |
 | 8080  | phpLDAPadmin (node 1 only via `--profile ui` / `ENABLE_PHPLDAPADMIN=true`) |
+| 8088  | Self Service Password (same `ui` profile / `ENABLE_SSP=true`) |
+| 9330  | Prometheus exporter (`--profile metrics` / `ENABLE_EXPORTER=true`) |
 
 ## Files
 

@@ -43,7 +43,7 @@ Kubernetes-only additions:
 ## Companion tooling
 
 - **[openldap-cli](https://github.com/maximewewer/openldap-cli)** - single static Go binary. Day-to-day admin (users, groups, ppolicy, backup, diagnostics). Called by Docker admins directly and by the Kubernetes chart's sync Jobs.
-- **[openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter)** - Prometheus scraper for `cn=Monitor`. Docker: sidecar container; Kubernetes: sidecar in the StatefulSet + `ServiceMonitor` + baseline `PrometheusRule`.
+- **[openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter)** - Prometheus scraper for `cn=Monitor`. Docker: opt-in `metrics` compose profile (`ENABLE_EXPORTER=true`); Kubernetes: sidecar in the StatefulSet + `ServiceMonitor` + baseline `PrometheusRule`.
 
 ## Quick start
 

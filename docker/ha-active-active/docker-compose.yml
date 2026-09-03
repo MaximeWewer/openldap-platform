@@ -84,3 +84,54 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+  # Prometheus exporter for cn=Monitor. Opt-in (`--profile metrics` /
+  # ENABLE_EXPORTER=true). Binds as the cn=config admin because the monitor
+  # database's ACL grants read to that DN only.
+  openldap-exporter:
+    image: ghcr.io/maximewewer/openldap_prometheus_exporter:v2026.7.1
+    container_name: openldap-exporter
+    hostname: openldap-exporter-${SERVER_ID:-1}
+    restart: always
+    profiles:
+      - metrics
+    ports:
+      - "9330:9330"
+    environment:
+      - LDAP_URL=ldap://openldap:389
+      - LDAP_USERNAME=cn=adminconfig,cn=config
+      - LDAP_PASSWORD=${CONFIG_ADMIN_PASSWORD:-adminpasswordconfig}
+      - LDAP_SERVER_NAME=openldap-${SERVER_ID:-1}
+      - LISTEN_ADDRESS=:9330
+    depends_on:
+      - openldap
+    networks:
+      - ldap-ha
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Self Service Password - end-user password change. Same `ui` profile as
+  # phpLDAPadmin; binds through HAProxy so it follows the active master.
+  selfservice-password:
+    image: ltbproject/self-service-password:1.8.1
+    container_name: selfservice-password
+    hostname: selfservice-password
+    restart: always
+    profiles:
+      - ui
+    ports:
+      - "8088:80"
+    volumes:
+      - ./ssp.conf.php:/var/www/conf/config.inc.local.php
+    depends_on:
+      - haproxy
+    networks:
+      - ldap-ha
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

@@ -91,6 +91,9 @@ Same as active-active, plus a separate read-only fan-out. HAProxy uses
 |------|------|
 | 1389 / 1636 | Writes - masters only (`SERVER_ID` 1-2), node1 active, node2 backup |
 | 1390 / 1637 | Read-only fan-out - consumers (`SERVER_ID` >= 3), roundrobin. Only bound when the topology has consumers |
+| 8080 | phpLDAPadmin (`--profile ui` / `ENABLE_PHPLDAPADMIN=true`) |
+| 8088 | Self Service Password (same `ui` profile / `ENABLE_SSP=true`) |
+| 9330 | Prometheus exporter (`--profile metrics` / `ENABLE_EXPORTER=true`) |
 
 Consumers are deliberately kept out of the write pool: they run without
 `olcMirrorMode`, so any write routed to one is refused with

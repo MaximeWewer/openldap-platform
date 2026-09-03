@@ -31,6 +31,8 @@ include: file:///etc/openldap/schema/core.ldif
 include: file:///etc/openldap/schema/cosine.ldif
 include: file:///etc/openldap/schema/inetorgperson.ldif
 include: file:///etc/openldap/schema/dyngroup.ldif
+# Uncomment for POSIX support (posixAccount, shadowAccount):
+#include: file:///etc/openldap/schema/nis.ldif
 
 dn: olcDatabase={-1}frontend,cn=config
 objectClass: olcDatabaseConfig
@@ -59,10 +61,14 @@ olcDbIndex: objectClass eq
 olcDbIndex: cn,sn,uid eq,pres,sub
 olcDbIndex: mail eq,sub
 olcDbIndex: member eq
+# Uncomment for POSIX support:
+#olcDbIndex: uidNumber,gidNumber eq
 olcDbIndex: entryCSN,entryUUID eq
 olcMonitoring: TRUE
 olcLimits: dn.exact="@@REPLICATOR_DN@@" size=unlimited time=unlimited
 olcAccess: {0}to attrs=userPassword by self write by dn.exact="cn=admin,ou=users,dc=example,dc=org" write by dn.exact="cn=ssp,ou=service-accounts,dc=example,dc=org" write by dn.exact="@@REPLICATOR_DN@@" read by anonymous auth by * none
+# Uncomment for POSIX support (shadowAccount):
+#olcAccess: {1}to attrs=shadowLastChange by self write by * read
 olcAccess: {1}to dn.subtree="ou=policies,dc=example,dc=org" by dn.exact="@@REPLICATOR_DN@@" read by * read
 olcAccess: {2}to dn.subtree="ou=service-accounts,dc=example,dc=org" by dn.exact="cn=admin,ou=users,dc=example,dc=org" write by dn.exact="@@REPLICATOR_DN@@" read by * none
 olcAccess: {3}to dn.subtree="ou=groups,dc=example,dc=org" by dn.exact="cn=admin,ou=users,dc=example,dc=org" write by dn.exact="cn=phpldapadmin,ou=service-accounts,dc=example,dc=org" read by dn.exact="@@REPLICATOR_DN@@" read by * none
@@ -136,7 +142,10 @@ objectClass: olcOverlayConfig
 objectClass: olcAccessLogConfig
 olcOverlay: accesslog
 olcAccessLogDB: cn=accesslog
-olcAccessLogOps: writes
+# `writes` feeds delta-syncrepl; `bind` adds the same bind audit trail the
+# standalone mode keeps. The syncrepl logfilter only matches
+# auditWriteObject, so the extra bind entries never reach replication.
+olcAccessLogOps: writes bind
 olcAccessLogSuccess: TRUE
 olcAccessLogPurge: 07+00:00 01+00:00
 

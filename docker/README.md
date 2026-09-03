@@ -589,7 +589,18 @@ openldap-cli ops db-stats               # focused on back_mdb (entries, pages, %
 openldap-cli ops replication            # local contextCSN per database
 ```
 
-To expose these metrics to Prometheus, use the [OpenLDAP Prometheus Exporter](https://github.com/maximewewer/openldap_prometheus_exporter). It connects to `cn=Monitor` and serves metrics on an HTTP endpoint for Prometheus scraping.
+To expose these metrics to Prometheus, every mode ships the [OpenLDAP Prometheus Exporter](https://github.com/maximewewer/openldap_prometheus_exporter) as an opt-in service behind the `metrics` compose profile. It binds as `cn=adminconfig,cn=config` - the `cn=Monitor` ACL grants read to that DN only - and serves `/metrics` on `:9330`.
+
+```bash
+# standalone
+ENABLE_EXPORTER=true bash setup.sh
+
+# HA - set ENABLE_EXPORTER=true in .env, then
+bash setup-node.sh
+
+# or on an already-running stack
+docker compose --profile metrics up -d
+```
 
 ---
 

@@ -79,3 +79,31 @@ services:
       options:
         "max-size": "10m"
         "max-file": "5"
+
+  # Prometheus exporter for cn=Monitor. Opt-in (`--profile metrics` /
+  # ENABLE_EXPORTER=true). Binds as the cn=config admin because the monitor
+  # database's ACL grants read to that DN only.
+  openldap-exporter:
+    image: ghcr.io/maximewewer/openldap_prometheus_exporter:v2026.7.1
+    container_name: openldap-exporter
+    hostname: openldap-exporter
+    restart: always
+    profiles:
+      - metrics
+    ports:
+      - 9330:9330
+    environment:
+      - LDAP_URL=ldap://openldap:389
+      - LDAP_USERNAME=cn=adminconfig,cn=config
+      - LDAP_PASSWORD=${CONFIG_ADMIN_PASSWORD:-adminpasswordconfig}
+      - LDAP_SERVER_NAME=openldap
+      - LISTEN_ADDRESS=:9330
+    depends_on:
+      - openldap
+    networks:
+      - ldap-internal
+    logging:
+      driver: json-file
+      options:
+        "max-size": "10m"
+        "max-file": "5"

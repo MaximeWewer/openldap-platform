@@ -106,7 +106,7 @@ SLAPD_DIR="./data/slapd.d"
 if [ -d "$SLAPD_DIR" ] && [ "$(ls -A $SLAPD_DIR 2>/dev/null)" ]; then
   if [ "${1:-}" = "--reset" ]; then
     echo "Resetting state..."
-    docker compose --profile ui down 2>/dev/null || true
+    docker compose --profile ui --profile metrics down 2>/dev/null || true
     docker run --rm -v "$(pwd)/data:/data" alpine:latest sh -c "rm -rf /data/slapd.d/* /data/openldap-data/* /data/accesslog-data/*"
   else
     echo "Error: $SLAPD_DIR already populated. Run with --reset to wipe." >&2
@@ -400,9 +400,23 @@ fi
 
 # === Start containers ===
 echo "=== Starting containers ==="
+
+# Self Service Password config. Rendered once, then left alone - the keyphrase
+# encrypts reset tokens and session cookies, so regenerating it on every run
+# would invalidate every token already in flight.
+if [ "${ENABLE_SSP:-${ENABLE_PHPLDAPADMIN:-false}}" = "true" ] && [ ! -f ./ssp.conf.php ]; then
+  echo "=== Rendering ssp.conf.php (random keyphrase) ==="
+  SSP_KEYPHRASE=$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-32)
+  sed "s|__SSP_KEYPHRASE__|${SSP_KEYPHRASE}|" ./ssp.conf.php.example > ./ssp.conf.php
+  chmod 600 ./ssp.conf.php
+fi
+
 PROFILES=()
 if [ "${ENABLE_PHPLDAPADMIN:-false}" = "true" ]; then
-  PROFILES=(--profile ui)
+  PROFILES+=(--profile ui)
+fi
+if [ "${ENABLE_EXPORTER:-false}" = "true" ]; then
+  PROFILES+=(--profile metrics)
 fi
 docker compose "${PROFILES[@]}" up -d
 
