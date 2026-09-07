@@ -242,6 +242,7 @@ Kubernetes: `>=1.27.0-0`
 | secrets.externalSecrets.secretStore.kind | string | `"ClusterSecretStore"` |  |
 | secrets.externalSecrets.secretStore.name | string | `""` |  |
 | securityContext.allowPrivilegeEscalation | bool | `false` |  |
+| securityContext.capabilities.add[0] | string | `"NET_BIND_SERVICE"` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
 | securityContext.runAsGroup | int | `102` |  |

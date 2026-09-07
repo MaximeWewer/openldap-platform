@@ -278,10 +278,6 @@ spec:
           {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-            capabilities:
-              drop: [ALL]
-              # slapd binds privileged port 389 (and 636 when TLS is on).
-              add: [NET_BIND_SERVICE]
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:

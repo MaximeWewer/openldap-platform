@@ -84,7 +84,10 @@ spec:
 {{- end }}
 {{- if and .Values.ingress.enabled .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled -}}
 {{- $fullName := include "phpldapadmin.fullname" . -}}
-{{- $issuerName := required "certManager.issuerRef.name is required" .Values.ingress.tls.certManager.issuerRef.name -}}
+{{- /* NOT -}}: the literal `---` below is the document separator. A right
+     chomp would swallow the newline before it and glue the separator onto
+     the last line of the preceding Ingress, merging the two documents. */ -}}
+{{- $issuerName := required "certManager.issuerRef.name is required" .Values.ingress.tls.certManager.issuerRef.name }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

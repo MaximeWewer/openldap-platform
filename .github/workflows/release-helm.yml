@@ -148,15 +148,43 @@ jobs:
 
       - name: Check every rendered document is a well-formed manifest
         run: |
-          # Two failure modes that render "successfully" and are only rejected
-          # by the API server at apply time:
+          # Three failure modes that render "successfully", parse as YAML, and
+          # are only caught at apply time - or never:
           #   * a subPath mount naming a volume that is never declared;
           #   * a bare `{{ required ... }}` guard, which RETURNS its value into
-          #     the manifest - it glues onto the next line and the document ends
-          #     up with a key like `host.exampleapiVersion` and no apiVersion at
-          #     all. It still parses as YAML, so helm template stays silent.
+          #     the manifest - it glues onto the next line, leaving a key like
+          #     `host.exampleapiVersion` and no apiVersion at all;
+          #   * a right-chomped action (`-}}`) directly above a literal `---`,
+          #     which eats the newline and glues the separator to the previous
+          #     line. The two documents merge into one, the later root keys win
+          #     and the earlier manifest is dropped SILENTLY - the merged doc
+          #     still has a valid apiVersion, so only duplicate root keys give
+          #     it away. Hence the strict loader below.
           python3 - <<'EOF'
           import subprocess, sys, yaml
+
+
+          class StrictLoader(yaml.SafeLoader):
+              """SafeLoader that refuses duplicate mapping keys.
+
+              PyYAML (and Kubernetes) silently keep the last of a duplicated key,
+              which is exactly how a merged document hides an entire manifest.
+              """
+
+
+          def _no_dupes(loader, node, deep=False):
+              mapping = {}
+              for key_node, value_node in node.value:
+                  key = loader.construct_object(key_node, deep=deep)
+                  if key in mapping:
+                      raise yaml.constructor.ConstructorError(
+                          None, None, f"duplicate key {key!r}", key_node.start_mark)
+                  mapping[key] = loader.construct_object(value_node, deep=deep)
+              return mapping
+
+
+          StrictLoader.add_constructor(
+              yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dupes)
           TLS = ["--set", "openldap.tls.enabled=true", "--set", "openldap.tls.backend=job"]
           cases = {
             "default": [],
@@ -186,6 +214,15 @@ jobs:
                                        "--set", "phpldapadmin.ingress.mode=gateway-api",
                                        "--set", "phpldapadmin.ingress.host=ui.example.org",
                                        "--set", "phpldapadmin.ingress.gatewayAPI.gatewayClassName=ci-gw"],
+            "ingress-existing-gateway": TLS + ["--set", "openldap.ingress.enabled=true",
+                                              "--set", "openldap.ingress.mode=gateway-api",
+                                              "--set", "openldap.ingress.host=ldap.example.org",
+                                              "--set", "openldap.ingress.gatewayAPI.gatewayName=shared-gw"],
+            "ui-ingress-existing-gateway": ["--set", "phpldapadmin.enabled=true",
+                                            "--set", "phpldapadmin.ingress.enabled=true",
+                                            "--set", "phpldapadmin.ingress.mode=gateway-api",
+                                            "--set", "phpldapadmin.ingress.host=ui.example.org",
+                                            "--set", "phpldapadmin.ingress.gatewayAPI.gatewayName=shared-gw"],
             "ui-ingress-certmanager": ["--set", "phpldapadmin.enabled=true",
                                        "--set", "phpldapadmin.ingress.enabled=true",
                                        "--set", "phpldapadmin.ingress.mode=ingress-nginx",
@@ -201,7 +238,14 @@ jobs:
                   capture_output=True, text=True)
               if out.returncode:
                   print(f"FAIL  {name}: render error"); rc = 1; continue
-              for doc in yaml.safe_load_all(out.stdout):
+              try:
+                  rendered = list(yaml.load_all(out.stdout, Loader=StrictLoader))
+              except yaml.YAMLError as exc:
+                  print(f"FAIL  {name}: {exc} "
+                        f"- merged documents? check for `-}}}}` above a literal ---")
+                  rc = 1
+                  continue
+              for doc in rendered:
                   if not doc:
                       continue
                   if not doc.get("apiVersion") or not doc.get("kind"):
