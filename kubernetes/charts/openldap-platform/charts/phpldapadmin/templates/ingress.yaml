@@ -1,5 +1,5 @@
 {{- if and .Values.ingress.enabled (eq .Values.ingress.mode "ingress-nginx") -}}
-{{- required "phpldapadmin.ingress.host is required when ingress is enabled" .Values.ingress.host -}}
+{{- $host := required "phpldapadmin.ingress.host is required when ingress is enabled" .Values.ingress.host -}}
 {{- $fullName := include "phpldapadmin.fullname" . -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -16,11 +16,11 @@ spec:
   ingressClassName: {{ .Values.ingress.ingressNginx.className }}
   {{- if .Values.ingress.tls.enabled }}
   tls:
-    - hosts: [{{ .Values.ingress.host | quote }}]
+    - hosts: [{{ $host | quote }}]
       secretName: {{ default (printf "%s-tls" $fullName) .Values.ingress.tls.existingSecret }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host }}
+    - host: {{ $host }}
       http:
         paths:
           - path: /
@@ -32,12 +32,12 @@ spec:
                   number: {{ .Values.service.port }}
 {{- end }}
 {{- if and .Values.ingress.enabled (eq .Values.ingress.mode "gateway-api") -}}
-{{- required "phpldapadmin.ingress.host is required when ingress is enabled" .Values.ingress.host -}}
+{{- $host := required "phpldapadmin.ingress.host is required when ingress is enabled" .Values.ingress.host -}}
 {{- $fullName := include "phpldapadmin.fullname" . -}}
 {{- $gwName := default (printf "%s-http" $fullName) .Values.ingress.gatewayAPI.gatewayName -}}
 {{- $gwNs   := default .Release.Namespace .Values.ingress.gatewayAPI.gatewayNamespace -}}
 {{- if not .Values.ingress.gatewayAPI.gatewayName }}
-{{- required "phpldapadmin.ingress.gatewayAPI.gatewayClassName is required when chart provisions the Gateway" .Values.ingress.gatewayAPI.gatewayClassName }}
+{{- $gwClass := required "phpldapadmin.ingress.gatewayAPI.gatewayClassName is required when chart provisions the Gateway" .Values.ingress.gatewayAPI.gatewayClassName }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -46,12 +46,12 @@ metadata:
   labels:
     {{- include "phpldapadmin.labels" . | nindent 4 }}
 spec:
-  gatewayClassName: {{ .Values.ingress.gatewayAPI.gatewayClassName }}
+  gatewayClassName: {{ $gwClass }}
   listeners:
     - name: {{ .Values.ingress.gatewayAPI.listenerName }}
       port: {{ .Values.ingress.gatewayAPI.port }}
       protocol: {{ ternary "HTTPS" "HTTP" .Values.ingress.tls.enabled }}
-      hostname: {{ .Values.ingress.host }}
+      hostname: {{ $host }}
       {{- if .Values.ingress.tls.enabled }}
       tls:
         mode: Terminate
@@ -76,7 +76,7 @@ spec:
       namespace: {{ $gwNs }}
       sectionName: {{ .Values.ingress.gatewayAPI.listenerName }}
   hostnames:
-    - {{ .Values.ingress.host | quote }}
+    - {{ $host | quote }}
   rules:
     - backendRefs:
         - name: {{ $fullName }}
@@ -84,7 +84,7 @@ spec:
 {{- end }}
 {{- if and .Values.ingress.enabled .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled -}}
 {{- $fullName := include "phpldapadmin.fullname" . -}}
-{{- required "certManager.issuerRef.name is required" .Values.ingress.tls.certManager.issuerRef.name -}}
+{{- $issuerName := required "certManager.issuerRef.name is required" .Values.ingress.tls.certManager.issuerRef.name -}}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -99,7 +99,7 @@ spec:
   dnsNames:
     - {{ .Values.ingress.host | quote }}
   issuerRef:
-    name: {{ .Values.ingress.tls.certManager.issuerRef.name }}
+    name: {{ $issuerName }}
     kind: {{ default "ClusterIssuer" .Values.ingress.tls.certManager.issuerRef.kind }}
     group: cert-manager.io
 {{- end }}

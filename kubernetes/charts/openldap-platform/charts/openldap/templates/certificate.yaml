@@ -1,6 +1,6 @@
 {{- if and .Values.tls.enabled (eq .Values.tls.backend "cert-manager") -}}
 {{- $issuer := .Values.tls.certManager.issuerRef -}}
-{{- required "tls.certManager.issuerRef.name is required when tls.backend=cert-manager" $issuer.name -}}
+{{- $issuerName := required "tls.certManager.issuerRef.name is required when tls.backend=cert-manager" $issuer.name -}}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -24,7 +24,7 @@ spec:
     - {{ . | quote }}
     {{- end }}
   issuerRef:
-    name: {{ $issuer.name }}
+    name: {{ $issuerName }}
     kind: {{ default "ClusterIssuer" $issuer.kind }}
     group: cert-manager.io
 {{- end }}

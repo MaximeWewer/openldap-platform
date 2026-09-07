@@ -107,6 +107,35 @@ jobs:
                                         --set openldap.networkPolicy.enabled=true
           render subcharts-ui           --set phpldapadmin.enabled=true \
                                         --set self-service-password.enabled=true
+          render ingress-nginx          --set openldap.tls.enabled=true --set openldap.tls.backend=job \
+                                        --set openldap.ingress.enabled=true \
+                                        --set openldap.ingress.mode=ingress-nginx \
+                                        --set openldap.ingress.host=ldap.example.org
+          render ingress-gateway-api    --set openldap.tls.enabled=true --set openldap.tls.backend=job \
+                                        --set openldap.ingress.enabled=true \
+                                        --set openldap.ingress.mode=gateway-api \
+                                        --set openldap.ingress.host=ldap.example.org \
+                                        --set openldap.ingress.gatewayAPI.gatewayClassName=ci-gw
+          render ui-ingress-nginx       --set phpldapadmin.enabled=true \
+                                        --set phpldapadmin.ingress.enabled=true \
+                                        --set phpldapadmin.ingress.mode=ingress-nginx \
+                                        --set phpldapadmin.ingress.host=ui.example.org \
+                                        --set self-service-password.enabled=true \
+                                        --set self-service-password.ingress.enabled=true \
+                                        --set self-service-password.ingress.mode=ingress-nginx \
+                                        --set self-service-password.ingress.host=pw.example.org
+          render ui-ingress-gateway-api --set phpldapadmin.enabled=true \
+                                        --set phpldapadmin.ingress.enabled=true \
+                                        --set phpldapadmin.ingress.mode=gateway-api \
+                                        --set phpldapadmin.ingress.host=ui.example.org \
+                                        --set phpldapadmin.ingress.gatewayAPI.gatewayClassName=ci-gw
+          render ui-ingress-certmanager --set phpldapadmin.enabled=true \
+                                        --set phpldapadmin.ingress.enabled=true \
+                                        --set phpldapadmin.ingress.mode=ingress-nginx \
+                                        --set phpldapadmin.ingress.host=ui.example.org \
+                                        --set phpldapadmin.ingress.tls.enabled=true \
+                                        --set phpldapadmin.ingress.tls.certManager.enabled=true \
+                                        --set phpldapadmin.ingress.tls.certManager.issuerRef.name=ci-issuer
           render hpa-and-schedule       --set openldap.mode=multi-master \
                                         --set openldap.replicaCount=2 \
                                         --set openldap.hpa.enabled=true \
@@ -117,18 +146,53 @@ jobs:
 
           exit $fail
 
-      - name: Check every volumeMount resolves to a declared volume
+      - name: Check every rendered document is a well-formed manifest
         run: |
-          # A subPath mount naming a volume that no longer exists renders fine
-          # and is only rejected by the API server at apply time. Catch it here.
+          # Two failure modes that render "successfully" and are only rejected
+          # by the API server at apply time:
+          #   * a subPath mount naming a volume that is never declared;
+          #   * a bare `{{ required ... }}` guard, which RETURNS its value into
+          #     the manifest - it glues onto the next line and the document ends
+          #     up with a key like `host.exampleapiVersion` and no apiVersion at
+          #     all. It still parses as YAML, so helm template stays silent.
           python3 - <<'EOF'
           import subprocess, sys, yaml
+          TLS = ["--set", "openldap.tls.enabled=true", "--set", "openldap.tls.backend=job"]
           cases = {
             "default": [],
             "no-persistence": ["--set", "openldap.persistence.enabled=false"],
             "readonly-pool": ["--set", "openldap.mode=mirror",
                               "--set", "openldap.replicaCount=2",
                               "--set", "openldap.readOnlyReplicas.count=2"],
+            "ingress-nginx": TLS + ["--set", "openldap.ingress.enabled=true",
+                                    "--set", "openldap.ingress.mode=ingress-nginx",
+                                    "--set", "openldap.ingress.host=ldap.example.org"],
+            "ingress-gateway-api": TLS + ["--set", "openldap.ingress.enabled=true",
+                                          "--set", "openldap.ingress.mode=gateway-api",
+                                          "--set", "openldap.ingress.host=ldap.example.org",
+                                          "--set", "openldap.ingress.gatewayAPI.gatewayClassName=ci-gw"],
+            "cert-manager": ["--set", "openldap.tls.enabled=true",
+                             "--set", "openldap.tls.certManager.issuerRef.name=ci-issuer"],
+            "ui-ingress-nginx": ["--set", "phpldapadmin.enabled=true",
+                                 "--set", "phpldapadmin.ingress.enabled=true",
+                                 "--set", "phpldapadmin.ingress.mode=ingress-nginx",
+                                 "--set", "phpldapadmin.ingress.host=ui.example.org",
+                                 "--set", "self-service-password.enabled=true",
+                                 "--set", "self-service-password.ingress.enabled=true",
+                                 "--set", "self-service-password.ingress.mode=ingress-nginx",
+                                 "--set", "self-service-password.ingress.host=pw.example.org"],
+            "ui-ingress-gateway-api": ["--set", "phpldapadmin.enabled=true",
+                                       "--set", "phpldapadmin.ingress.enabled=true",
+                                       "--set", "phpldapadmin.ingress.mode=gateway-api",
+                                       "--set", "phpldapadmin.ingress.host=ui.example.org",
+                                       "--set", "phpldapadmin.ingress.gatewayAPI.gatewayClassName=ci-gw"],
+            "ui-ingress-certmanager": ["--set", "phpldapadmin.enabled=true",
+                                       "--set", "phpldapadmin.ingress.enabled=true",
+                                       "--set", "phpldapadmin.ingress.mode=ingress-nginx",
+                                       "--set", "phpldapadmin.ingress.host=ui.example.org",
+                                       "--set", "phpldapadmin.ingress.tls.enabled=true",
+                                       "--set", "phpldapadmin.ingress.tls.certManager.enabled=true",
+                                       "--set", "phpldapadmin.ingress.tls.certManager.issuerRef.name=ci-issuer"],
           }
           rc = 0
           for name, extra in cases.items():
@@ -138,7 +202,14 @@ jobs:
               if out.returncode:
                   print(f"FAIL  {name}: render error"); rc = 1; continue
               for doc in yaml.safe_load_all(out.stdout):
-                  if not doc or doc.get("kind") not in ("StatefulSet", "Deployment", "Job", "CronJob"):
+                  if not doc:
+                      continue
+                  if not doc.get("apiVersion") or not doc.get("kind"):
+                      print(f"FAIL  {name}: document without apiVersion/kind, "
+                            f"keys={sorted(doc)[:4]} - a leaking `required` guard?")
+                      rc = 1
+                      continue
+                  if doc.get("kind") not in ("StatefulSet", "Deployment", "Job", "CronJob"):
                       continue
                   spec = doc["spec"].get("template", doc["spec"]).get("spec")
                   if spec is None:

@@ -2,13 +2,13 @@
 {{- if not .Values.tls.enabled -}}
 {{- fail "ingress.enabled=true with mode=gateway-api requires tls.enabled=true (TLSRoute is SNI-based passthrough - plaintext LDAP needs a separate LoadBalancer/NodePort)" -}}
 {{- end -}}
-{{- required "ingress.host is required" .Values.ingress.host -}}
+{{- $host := required "ingress.host is required" .Values.ingress.host -}}
 {{- $fullName := include "openldap.fullname" . -}}
 {{- $gwName := default (printf "%s-ldaps" $fullName) .Values.ingress.gatewayAPI.gatewayName -}}
 {{- $gwNs   := default .Release.Namespace .Values.ingress.gatewayAPI.gatewayNamespace -}}
 
 {{- if not .Values.ingress.gatewayAPI.gatewayName -}}
-{{- required "ingress.gatewayAPI.gatewayClassName is required when the chart provisions its own Gateway" .Values.ingress.gatewayAPI.gatewayClassName -}}
+{{- $gwClass := required "ingress.gatewayAPI.gatewayClassName is required when the chart provisions its own Gateway" .Values.ingress.gatewayAPI.gatewayClassName -}}
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -18,12 +18,12 @@ metadata:
     {{- include "openldap.labels" . | nindent 4 }}
     app.kubernetes.io/component: ingress
 spec:
-  gatewayClassName: {{ .Values.ingress.gatewayAPI.gatewayClassName }}
+  gatewayClassName: {{ $gwClass }}
   listeners:
     - name: {{ .Values.ingress.gatewayAPI.listenerName }}
       port: {{ .Values.ingress.gatewayAPI.port }}
       protocol: TLS
-      hostname: {{ .Values.ingress.host }}
+      hostname: {{ $host }}
       tls:
         mode: Passthrough                  # SNI-based, no termination
       allowedRoutes:
@@ -45,7 +45,7 @@ spec:
       namespace: {{ $gwNs }}
       sectionName: {{ .Values.ingress.gatewayAPI.listenerName }}
   hostnames:
-    - {{ .Values.ingress.host | quote }}
+    - {{ $host | quote }}
   rules:
     - backendRefs:
         - name: {{ include "openldap.fullname" . }}
