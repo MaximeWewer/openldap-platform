@@ -578,9 +578,18 @@ openldap:
   # Passwords are auto-generated per user unless `existingSecret` is set.
   # Generated passwords are stored in a Secret named
   #   `<release>-openldap-user-<uid>`
-  # with key `password`. The Secret carries the label
-  #   openldap.platform/user=<uid>
-  # so external systems can watch/list them.
+  # with key `password`, labelled `openldap.platform/user=<uid>`.
+  #
+  # That Secret is a BOOTSTRAP credential, not a source of truth. Nothing writes
+  # back to it: once the user changes their password (Self Service Password binds
+  # as the ssp account and modifies the entry directly) the Secret still holds the
+  # old value, and the chart cannot recover the new one - the directory only keeps
+  # a hash. Reconciliation never overwrites a password either, so the user's
+  # choice survives every `helm upgrade`; only the Secret goes stale.
+  #
+  # Read it to hand out the initial credential. Do not wire it into anything that
+  # needs a working password later on. With ppolicy.defaultPolicy.mustChange on
+  # (the default) the generated password is single-use anyway.
   users: []
   # Example:
   #   users:
@@ -602,6 +611,17 @@ openldap:
   # What happens when a user is removed from the values.yaml on upgrade.
   #   delete -> `openldap-cli user delete`
   #   lock   -> `openldap-cli user set <uid> pwdAccountLockedTime 000001010000Z`
+  # A user must be created but a Secret for that uid already exists - the
+  # directory entry was removed out-of-band, restored from an older backup, or
+  # purged after `onUserRemove: lock`.
+  #   false -> generate a fresh password and overwrite the Secret (default).
+  #   true  -> reuse the stored password, so an uninstall/reinstall cycle keeps
+  #            the same credential.
+  # Kept false because the stored value may be a bootstrap password the user has
+  # already replaced: reviving it hands back a credential they deliberately
+  # changed, and the Secret gives no way to tell the two cases apart.
+  reuseOrphanedUserSecret: false
+
   onUserRemove: delete
 
   # =============================================================================

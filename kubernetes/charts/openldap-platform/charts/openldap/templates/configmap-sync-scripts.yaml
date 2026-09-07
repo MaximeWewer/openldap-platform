@@ -305,8 +305,20 @@ data:
                  -o jsonpath='{.data.password}' | base64 -d)
           [ -n "$PW" ] || DIE "existingSecret ${EXISTING_SECRET} has no data.password"
         elif secret_password_exists "$UID_VAL"; then
-          # A Secret survived from a previous install; reuse it.
-          PW=$(secret_password_get "$UID_VAL")
+          # The Secret outlived its directory entry. Its value may be a
+          # bootstrap password the user already replaced through SSP - nothing
+          # writes back to the Secret, so it cannot be told apart from one that
+          # was never used. Default to a fresh password rather than handing back
+          # a credential the user deliberately changed.
+          if [ "${REUSE_ORPHANED_SECRET:-false}" = "true" ]; then
+            LOG "user ${UID_VAL}: reusing the password from the surviving Secret"
+            PW=$(secret_password_get "$UID_VAL")
+          else
+            LOG "user ${UID_VAL}: a Secret survives but the directory entry does not"
+            LOG "  -> generating a NEW password and overwriting that Secret"
+            LOG "  -> set reuseOrphanedUserSecret=true to keep the stored one"
+            PW=$(gen_password)
+          fi
         else
           PW=$(gen_password)
         fi

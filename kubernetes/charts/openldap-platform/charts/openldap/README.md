@@ -188,6 +188,18 @@ Kubernetes: `>=1.27.0-0`
 | podSecurityContext.runAsNonRoot | bool | `true` |  |
 | podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | policies | list | `[]` |  |
+| ppolicy.defaultPolicy.allowUserChange | bool | `true` |  |
+| ppolicy.defaultPolicy.checkQuality | int | `1` |  |
+| ppolicy.defaultPolicy.create | bool | `true` |  |
+| ppolicy.defaultPolicy.expireWarning | int | `604800` |  |
+| ppolicy.defaultPolicy.inHistory | int | `5` |  |
+| ppolicy.defaultPolicy.lockout | bool | `true` |  |
+| ppolicy.defaultPolicy.lockoutDuration | int | `1800` |  |
+| ppolicy.defaultPolicy.maxAge | int | `31536000` |  |
+| ppolicy.defaultPolicy.maxFailure | int | `3` |  |
+| ppolicy.defaultPolicy.minLength | int | `16` |  |
+| ppolicy.defaultPolicy.mustChange | bool | `true` |  |
+| ppolicy.defaultPolicy.safeModify | bool | `false` |  |
 | ppolicy.defaultPolicyRDN | string | `"cn=defaultppolicy"` |  |
 | ppolicy.enabled | bool | `true` |  |
 | ppolicy.hashCleartext | bool | `true` |  |
@@ -231,6 +243,7 @@ Kubernetes: `>=1.27.0-0`
 | resources.limits.memory | string | `"1Gi"` |  |
 | resources.requests.cpu | string | `"100m"` |  |
 | resources.requests.memory | string | `"256Mi"` |  |
+| reuseOrphanedUserSecret | bool | `false` |  |
 | scaleSchedule | list | `[]` |  |
 | scaleWatcher.pollIntervalSeconds | int | `10` |  |
 | scaleWatcher.resources.limits.cpu | string | `"100m"` |  |

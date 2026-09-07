@@ -276,6 +276,7 @@ Kubernetes: `>=1.27.0-0`
 | openldap.resources.limits.memory | string | `"1Gi"` |  |
 | openldap.resources.requests.cpu | string | `"100m"` |  |
 | openldap.resources.requests.memory | string | `"256Mi"` |  |
+| openldap.reuseOrphanedUserSecret | bool | `false` |  |
 | openldap.scaleSchedule | list | `[]` |  |
 | openldap.scaleWatcher.pollIntervalSeconds | int | `10` |  |
 | openldap.scaleWatcher.resources.limits.cpu | string | `"100m"` |  |

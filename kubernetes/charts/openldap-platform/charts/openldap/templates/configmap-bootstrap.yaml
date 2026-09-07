@@ -667,7 +667,29 @@ data:
     objectClass: organizationalUnit
     ou: {{ . }}
     {{ end }}
+    {{- if and .Values.ppolicy.enabled .Values.ppolicy.defaultPolicy.create }}
+    {{- with .Values.ppolicy.defaultPolicy }}
+    dn: {{ $.Values.ppolicy.defaultPolicyRDN }},ou=policies,{{ $.Values.directory.suffix }}
+    objectClass: pwdPolicy
+    objectClass: person
+    cn: {{ $.Values.ppolicy.defaultPolicyRDN | trimPrefix "cn=" }}
+    sn: default password policy
+    pwdAttribute: userPassword
+    pwdMinLength: {{ .minLength | int64 }}
+    pwdMaxAge: {{ .maxAge | int64 }}
+    pwdExpireWarning: {{ .expireWarning | int64 }}
+    pwdInHistory: {{ .inHistory | int64 }}
+    pwdCheckQuality: {{ .checkQuality | int64 }}
+    pwdLockout: {{ ternary "TRUE" "FALSE" .lockout }}
+    pwdLockoutDuration: {{ .lockoutDuration | int64 }}
+    pwdMaxFailure: {{ .maxFailure | int64 }}
+    pwdMustChange: {{ ternary "TRUE" "FALSE" .mustChange }}
+    pwdAllowUserChange: {{ ternary "TRUE" "FALSE" .allowUserChange }}
+    pwdSafeModify: {{ ternary "TRUE" "FALSE" .safeModify }}
+    {{- end }}
+    {{- end }}
     {{- if $ha }}
+
     dn: {{ .Values.replication.replicator.dn }},{{ .Values.directory.suffix }}
     objectClass: inetOrgPerson
     cn: {{ (split "," .Values.replication.replicator.dn)._0 | trimPrefix "cn=" }}
