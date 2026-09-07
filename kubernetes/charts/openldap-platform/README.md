@@ -311,6 +311,13 @@ Kubernetes: `>=1.27.0-0`
 | openldap.serviceAccount.create | bool | `true` |  |
 | openldap.serviceAccount.name | string | `""` |  |
 | openldap.sidecars | list | `[]` |  |
+| openldap.staleUserSecretCleanup.dryRun | bool | `false` |  |
+| openldap.staleUserSecretCleanup.enabled | bool | `false` |  |
+| openldap.staleUserSecretCleanup.resources.limits.cpu | string | `"500m"` |  |
+| openldap.staleUserSecretCleanup.resources.limits.memory | string | `"256Mi"` |  |
+| openldap.staleUserSecretCleanup.resources.requests.cpu | string | `"50m"` |  |
+| openldap.staleUserSecretCleanup.resources.requests.memory | string | `"64Mi"` |  |
+| openldap.staleUserSecretCleanup.schedule | string | `"30 3 * * *"` |  |
 | openldap.startupProbe.failureThreshold | int | `60` |  |
 | openldap.startupProbe.initialDelaySeconds | int | `5` |  |
 | openldap.startupProbe.periodSeconds | int | `5` |  |

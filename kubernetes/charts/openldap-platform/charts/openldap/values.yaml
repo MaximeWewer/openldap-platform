@@ -813,6 +813,30 @@ overlays: []
 # CronJob that reports unreachable (shadowed) and no-op olcAccess rules.
 # Exits non-zero if any are found so the CronJob shows as Failed and can wire
 # into alerting. Read-only - writes nothing to cn=config.
+# =============================================================================
+# Stale user Secret cleanup
+# =============================================================================
+# The per-user Secret holds the password the chart generated at creation time.
+# Nothing writes back to it, so the moment the user changes their password (via
+# Self Service Password, an admin, or any LDAP client) the Secret holds a value
+# that no longer works - and cannot be repaired, the directory keeps only a
+# hash. This CronJob finds those Secrets and deletes them, rather than leaving
+# spent credentials in the namespace.
+#
+# Detection is exact, not heuristic: `secret_password_put` stamps each Secret
+# with the pwdChangedTime observed just after it set the password, and the job
+# deletes only when the directory now reports a different one. Secrets with no
+# marker, entries with no pwdChangedTime (seeded by slapadd) and users with no
+# entry at all are all left untouched.
+staleUserSecretCleanup:
+  enabled: false
+  schedule: "30 3 * * *"         # daily 03:30
+  # Report what would be deleted without deleting anything.
+  dryRun: false
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
+
 aclLintCronJob:
   enabled: false
   schedule: "0 6 * * *"          # daily 06:00

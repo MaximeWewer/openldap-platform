@@ -136,6 +136,11 @@ jobs:
                                         --set phpldapadmin.ingress.tls.enabled=true \
                                         --set phpldapadmin.ingress.tls.certManager.enabled=true \
                                         --set phpldapadmin.ingress.tls.certManager.issuerRef.name=ci-issuer
+          render stale-secret-cleanup   --set openldap.staleUserSecretCleanup.enabled=true
+          render cronjobs-all           --set openldap.staleUserSecretCleanup.enabled=true \
+                                        --set openldap.aclLintCronJob.enabled=true \
+                                        --set openldap.accesslogPurgeJob.enabled=true \
+                                        --set openldap.backup.enabled=true
           render hpa-and-schedule       --set openldap.mode=multi-master \
                                         --set openldap.replicaCount=2 \
                                         --set openldap.hpa.enabled=true \
@@ -223,6 +228,7 @@ jobs:
                                             "--set", "phpldapadmin.ingress.mode=gateway-api",
                                             "--set", "phpldapadmin.ingress.host=ui.example.org",
                                             "--set", "phpldapadmin.ingress.gatewayAPI.gatewayName=shared-gw"],
+            "stale-secret-cleanup": ["--set", "openldap.staleUserSecretCleanup.enabled=true"],
             "ui-ingress-certmanager": ["--set", "phpldapadmin.enabled=true",
                                        "--set", "phpldapadmin.ingress.enabled=true",
                                        "--set", "phpldapadmin.ingress.mode=ingress-nginx",

@@ -279,6 +279,13 @@ Kubernetes: `>=1.27.0-0`
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
 | sidecars | list | `[]` |  |
+| staleUserSecretCleanup.dryRun | bool | `false` |  |
+| staleUserSecretCleanup.enabled | bool | `false` |  |
+| staleUserSecretCleanup.resources.limits.cpu | string | `"500m"` |  |
+| staleUserSecretCleanup.resources.limits.memory | string | `"256Mi"` |  |
+| staleUserSecretCleanup.resources.requests.cpu | string | `"50m"` |  |
+| staleUserSecretCleanup.resources.requests.memory | string | `"64Mi"` |  |
+| staleUserSecretCleanup.schedule | string | `"30 3 * * *"` |  |
 | startupProbe.failureThreshold | int | `60` |  |
 | startupProbe.initialDelaySeconds | int | `5` |  |
 | startupProbe.periodSeconds | int | `5` |  |

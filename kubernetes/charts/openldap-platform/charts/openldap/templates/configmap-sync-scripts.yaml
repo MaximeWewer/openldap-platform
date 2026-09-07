@@ -5,7 +5,7 @@ download openldap-cli + kubectl, then run one of the scripts below.
 
 Each script is idempotent - safe to re-run on every `helm upgrade`.
 */ -}}
-{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled -}}
+{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled .Values.staleUserSecretCleanup.enabled -}}
 {{- $suffix := .Values.directory.suffix -}}
 {{- $userOU := "ou=users" -}}
 {{- $groupOU := "ou=groups" -}}
@@ -140,12 +140,29 @@ data:
         -o jsonpath='{.data.password}' 2>/dev/null | base64 -d
     }
 
+    # pwdChangedTime is maintained by the ppolicy overlay on every userPassword
+    # write, including the chart's own. Recording the value observed right after
+    # we set the password gives the cleanup CronJob an exact marker: if the
+    # directory later reports a different one, someone (Self Service Password,
+    # an admin, the user) has changed the password and the stored Secret is
+    # stale. Empty for entries never written over LDAP - slapadd bypasses the
+    # overlay, so seeded users have no pwdChangedTime at all.
+    user_pwd_changed_time() {
+      openldap-cli search '(objectClass=*)' \
+        --base "cn=$1,${LDAP_USER_OU},${LDAP_BASE_DN}" \
+        --scope base --operational -o json 2>/dev/null \
+        | jq -r '.entries[0].attrs.pwdChangedTime[0] // empty' 2>/dev/null || true
+    }
+
     secret_password_put() {
-      local uid="$1" pw="$2" name
+      local uid="$1" pw="$2" name stamp
       name="$(secret_name_for_user "$uid")"
+      stamp="$(user_pwd_changed_time "$uid")"
       kubectl -n "${RELEASE_NAMESPACE}" create secret generic "$name" \
         --from-literal=password="$pw" \
         --dry-run=client -o yaml \
+        | kubectl annotate -f - --local -o yaml \
+            "openldap.platform/pwd-changed-time=${stamp}" \
         | kubectl label -f - --local -o yaml \
             "app.kubernetes.io/managed-by=Helm" \
             "app.kubernetes.io/component=user-credentials" \
@@ -765,6 +782,66 @@ data:
   # acl-lint.sh - periodic `config acl lint`. Exits non-zero when unreachable /
   # no-op rules are reported so the CronJob shows Failed and can page.
   # ---------------------------------------------------------------------------
+  stale-user-secrets.sh: |
+    #!/bin/sh
+    set -eu
+    . /scripts/common.sh
+    wait_for_ldap
+
+    # A chart-managed user Secret holds the password the chart generated at
+    # creation time. Nothing writes back to it: when the user changes their
+    # password (Self Service Password binds as the ssp account and modifies the
+    # entry directly) the Secret keeps the old value, and it cannot be repaired
+    # - the directory only stores a hash. So the Secret is not stale data to be
+    # refreshed, it is a spent credential to be removed.
+    #
+    # Detection compares the directory's current pwdChangedTime against the one
+    # recorded on the Secret when the chart wrote it. Anything else is left
+    # alone: a missing marker (Secret written before this job existed), a
+    # missing pwdChangedTime (entry seeded by slapadd, never written over LDAP),
+    # or a missing entry (that is the users sync job's drift branch, not ours).
+    LOG "scanning chart-managed user Secrets - dryRun=${DRY_RUN:-false}"
+
+    SECRETS=$(kubectl -n "${RELEASE_NAMESPACE}" get secrets \
+                -l "openldap.platform/release=${RELEASE_NAME},app.kubernetes.io/component=user-credentials" \
+                -o jsonpath='{range .items[*]}{.metadata.labels.openldap\.platform/user}{" "}{.metadata.annotations.openldap\.platform/pwd-changed-time}{"\n"}{end}' \
+                2>/dev/null || true)
+
+    CHECKED=0; STALE=0; SKIPPED=0
+    printf '%s\n' "$SECRETS" | while IFS=' ' read -r UID_VAL STAMP; do
+      [ -n "${UID_VAL:-}" ] || continue
+      CHECKED=$((CHECKED + 1))
+
+      if ! openldap-cli user info "$UID_VAL" >/dev/null 2>&1; then
+        LOG "  ${UID_VAL}: no directory entry - left to the users sync job"
+        SKIPPED=$((SKIPPED + 1)); continue
+      fi
+      if [ -z "${STAMP:-}" ]; then
+        LOG "  ${UID_VAL}: Secret carries no pwd-changed-time marker - skipping"
+        SKIPPED=$((SKIPPED + 1)); continue
+      fi
+
+      CURRENT=$(user_pwd_changed_time "$UID_VAL")
+      if [ -z "${CURRENT:-}" ]; then
+        LOG "  ${UID_VAL}: entry has no pwdChangedTime - skipping"
+        SKIPPED=$((SKIPPED + 1)); continue
+      fi
+      if [ "$CURRENT" = "$STAMP" ]; then
+        LOG "  ${UID_VAL}: password unchanged since the chart set it - Secret still valid"
+        continue
+      fi
+
+      STALE=$((STALE + 1))
+      if [ "${DRY_RUN:-false}" = "true" ]; then
+        LOG "  ${UID_VAL}: STALE (was ${STAMP}, now ${CURRENT}) - would delete its Secret"
+      else
+        LOG "  ${UID_VAL}: STALE (was ${STAMP}, now ${CURRENT}) - deleting its Secret"
+        secret_password_delete "$UID_VAL"
+      fi
+    done
+
+    LOG "stale user Secret scan done"
+
   acl-lint.sh: |
     #!/bin/sh
     set -eu

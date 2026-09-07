@@ -13,7 +13,7 @@ is never needed (external-secrets integration delegates to ESO's own
 controller SA rather than expanding this Role).
 */ -}}
 {{- $needScaleWatcher := and (eq .Values.mode "multi-master") (or .Values.hpa.enabled .Values.scaleSchedule) -}}
-{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled .Values.scaleSchedule $needScaleWatcher (and .Values.tls.enabled (eq .Values.tls.backend "job")) -}}
+{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled .Values.staleUserSecretCleanup.enabled .Values.scaleSchedule $needScaleWatcher (and .Values.tls.enabled (eq .Values.tls.backend "job")) -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -40,10 +40,10 @@ rules:
   #   * `get` must reach any name, because users may point `existingSecret` at
   #     an arbitrary Secret in the namespace.
   # `delete` is the one verb that can be dropped, and it is: only
-  # onUserRemove=delete ever removes a Secret.
+  # onUserRemove=delete and the stale-Secret cleanup ever remove a Secret.
   - apiGroups: [""]
     resources: [secrets]
-    verbs: [get, list, create, update, patch{{ if eq .Values.onUserRemove "delete" }}, delete{{ end }}]
+    verbs: [get, list, create, update, patch{{ if or (eq .Values.onUserRemove "delete") .Values.staleUserSecretCleanup.enabled }}, delete{{ end }}]
   - apiGroups: [""]
     resources: [pods]
     verbs: [get, list]
