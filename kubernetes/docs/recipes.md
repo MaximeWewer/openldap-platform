@@ -439,9 +439,60 @@ Rules the sync Jobs enforce:
   reason.
 * Entries are never moved. Changing `ou:` on an entry that already exists
   logs a warning for a user, and fails the Job for a group (creating a
-  second `cn` elsewhere would poison every later lookup). Delete the entry
-  by hand, or revert the value - a move rewrites the DN that group members,
-  ACLs and `svc grant` rules point at.
+  second `cn` elsewhere would poison every later lookup). A move rewrites
+  the DN that group members, ACLs and `svc grant` rules point at, so it is a
+  hand operation - see below.
 * Group drift removal only looks inside `ou=groups` plus every OU named in
   `groups[].ou`. A `groupOfNames` sitting anywhere else is somebody else's
   and is left alone.
+* Group membership is reconciled on **full DNs**, not on the RDN. That
+  matters here: `cn=vpn,ou=users` and `cn=vpn,ou=service-accounts` share the
+  RDN `vpn`, so an RDN-level comparison would read a member left behind by a
+  move as correct and never repair it. When the sets differ, the Job rewrites
+  `member` in a single atomic replace - `groupOfNames` rejects an empty
+  `member`, so a full swap cannot be staged as remove-then-add.
+
+### Moving an entry to another OU
+
+The chart will not do it. Do it by hand from an export, so the stored
+password hash comes back unchanged and the per-user Secret stays valid:
+
+```bash
+PW=$(kubectl -n ldap get secret ldap-openldap-admin \
+       -o jsonpath='{.data.admin-password}' | base64 -d)
+
+# 1. dump the entry as it stands, userPassword included (admin bind)
+kubectl -n ldap exec ldap-openldap-0 -- \
+  ldapsearch -x -LLL -H ldap://localhost:389 \
+    -D cn=admin,dc=example,dc=org -w "$PW" \
+    -b 'cn=grafana,ou=users,dc=example,dc=org' -s base \
+    '(objectClass=*)' '*' userPassword > grafana.ldif
+
+# 2. repoint the DN, then delete the old entry and add the new one
+sed -i 's/^dn: cn=grafana,ou=users,/dn: cn=grafana,ou=service-accounts,/' grafana.ldif
+kubectl -n ldap exec -i ldap-openldap-0 -- \
+  ldapdelete -x -H ldap://localhost:389 \
+    -D cn=admin,dc=example,dc=org -w "$PW" \
+    'cn=grafana,ou=users,dc=example,dc=org'
+kubectl -n ldap exec -i ldap-openldap-0 -- \
+  ldapadd -x -H ldap://localhost:389 \
+    -D cn=admin,dc=example,dc=org -w "$PW" < grafana.ldif
+
+# 3. set `ou:` in values, then `helm upgrade`
+```
+
+`openldap-cli user export --ldif` does the same for a whole OU at once
+(it writes every user under the current user base).
+
+Group entries still name the old DN in `member` after step 2, and without
+the `refint` overlay nothing in slapd repairs them. The next `groups` sync
+Job does: it compares DNs, so it sees the stale value and replaces the
+attribute. Enable `refint` if you want slapd to handle it at delete time
+instead:
+
+```yaml
+openldap:
+  overlays:
+    - name: refint
+      enable: true
+```

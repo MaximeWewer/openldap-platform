@@ -217,7 +217,7 @@ Six values blocks (`openldap.overlays`, `openldap.policies`, `openldap.acls`, `o
 | 8 | `acls` | `config acl grant/revoke` | Chart-owned grantee (group|dn); revoke-then-grant on each upgrade. |
 | 9 | `tree-grants` | `svc grant/revoke` | Tree-scoped ACL helper - container + entry rules for a service account. |
 | 10 | `users` | `user add/set/delete` | Auto-generated passwords land in `<release>-openldap-user-<uid>` Secrets. `ou:` places the entry outside `ou=users`. |
-| 15 | `groups` | `group create/add-member/remove-member/set` | Reconciles `members` + description. `ou:` places the group outside `ou=groups`; drift removal only looks inside the declared OUs. |
+| 15 | `groups` | `group create/set` | Reconciles `members` (compared as full DNs, rewritten in one atomic replace) + description. `ou:` places the group outside `ou=groups`; drift removal only looks inside the declared OUs. |
 
 Drift removal for `acls` / `treeGrants` / `overlays` uses a chart-managed ConfigMap `<release>-openldap-sync-state` (one JSON key per phase) that snapshots the previously-applied set - entries removed from `values.yaml` on the next upgrade are revoked / disabled automatically.
 
@@ -270,7 +270,7 @@ openldap:
 
 Passwords per user land in `<release>-openldap-user-<uid>`. Attribute changes reconcile on every upgrade. Group membership is expressed on the group side; the `memberOf` overlay auto-populates the user entry.
 
-`uid` and `cn` must be unique across OUs - every verb but the initial create resolves an entry by searching from the base DN, and the per-user Secret is keyed on the uid alone. Entries are never moved: changing `ou:` on an existing entry warns (user) or fails the Job (group), since the DN is what `member`, ACLs and `svc grant` rules point at.
+`uid` and `cn` must be unique across OUs - every verb but the initial create resolves an entry by searching from the base DN, and the per-user Secret is keyed on the uid alone. Entries are never moved: changing `ou:` on an existing entry warns (user) or fails the Job (group), since the DN is what `member`, ACLs and `svc grant` rules point at - [recipes.md §7](docs/recipes.md#moving-an-entry-to-another-ou) has the hand procedure that keeps the password hash. Membership is reconciled on full DNs, so a `member` left pointing at the old DN by such a move is repaired on the next upgrade even without the `refint` overlay.
 
 The sync Jobs install `openldap-cli` + `kubectl` from GitHub / dl.k8s.io into a plain Alpine image at Job startup - no custom image build required. Their ServiceAccount is scoped strictly to Secret CRUD, ConfigMap get/create/patch for the sync-state (when `acls`/`treeGrants`/`overlays` are used), and `statefulsets/patch` when TLS renewal needs a rolling restart - all in the release namespace.
 

@@ -546,28 +546,46 @@ data:
 
       if gcli group info "$CN" >/dev/null 2>&1; then
         LOG "group ${CN}: exists - reconciling members"
-        # Current members: extract UID (RDN value) from each member DN
-        # (member: cn=alice,ou=users,...).
-        CURRENT=$(gcli group info "$CN" -o json 2>/dev/null \
+
+        # Compared as full DNs, never as RDNs. Reducing `member` to its RDN
+        # (the old `sed -n 's/^cn=\([^,]*\),.*/\1/p'`) made a stale value
+        # indistinguishable from a correct one: an entry moved out of ou=users
+        # by hand leaves `cn=vpn,ou=users,...` behind, which reduces to `vpn`,
+        # matches the declared member `vpn`, and is never repaired - and
+        # without the refint overlay nothing else repairs it either.
+        : > /tmp/members-want.txt
+        for u in $MEMBERS; do
+          DN=$(user_dn "$u")
+          [ -n "$DN" ] || DIE "group ${CN}: declared member ${u} has no entry in the directory"
+          echo "$DN" >> /tmp/members-want.txt
+        done
+        sort -u /tmp/members-want.txt -o /tmp/members-want.txt
+
+        gcli group info "$CN" -o json 2>/dev/null \
           | jq -r '.attrs.member[]? // empty' \
-          | sed -n 's/^cn=\([^,]*\),.*/\1/p' \
-          | sort -u)
+          | sort -u > /tmp/members-have.txt
+
         # Plain files, not `comm <(...) <(...)`: the Jobs run /bin/sh, which is
         # busybox ash on the alpine image, and it has no process substitution -
         # the script died with `Syntax error: "(" unexpected` before reaching
         # the first membership change.
-        printf '%s\n' $MEMBERS | sort -u > /tmp/members-declared.txt
-        printf '%s\n' "$CURRENT" | sort -u > /tmp/members-current.txt
-        TO_ADD=$(comm -23 /tmp/members-declared.txt /tmp/members-current.txt || true)
-        TO_REM=$(comm -13 /tmp/members-declared.txt /tmp/members-current.txt || true)
-        for u in $TO_ADD; do
-          LOG "  add-member ${u}"
-          gcli group add-member "$CN" "$u"
-        done
-        for u in $TO_REM; do
-          LOG "  remove-member ${u}"
-          gcli group remove-member "$CN" "$u"
-        done
+        if ! cmp -s /tmp/members-want.txt /tmp/members-have.txt; then
+          comm -23 /tmp/members-want.txt /tmp/members-have.txt \
+            | while read -r dn; do [ -n "$dn" ] && LOG "  + ${dn}"; done
+          comm -13 /tmp/members-want.txt /tmp/members-have.txt \
+            | while read -r dn; do [ -n "$dn" ] && LOG "  - ${dn}"; done
+          # One atomic replace rather than add-member/remove-member pairs:
+          # groupOfNames rejects an empty `member`, so a full swap done in two
+          # steps has to be ordered by hand and still breaks when the last
+          # member is the one being replaced. `--force` is required because a
+          # replace drops the values it was not shown - which is the point.
+          set -- "$CN" member
+          while read -r dn; do
+            [ -n "$dn" ] || continue
+            set -- "$@" "$dn"
+          done < /tmp/members-want.txt
+          gcli group set --force "$@"
+        fi
       else
         LOG "group ${CN}: creating in ${GROUP_OU},${LDAP_BASE_DN} with ${MEMBERS}"
         # `group create` requires at least one --member; extra members added after.
