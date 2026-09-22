@@ -170,6 +170,7 @@ Kubernetes: `>=1.27.0-0`
 | nodeAffinityPreset.values | list | `[]` |  |
 | nodeSelector | object | `{}` |  |
 | onGroupRemove | string | `"delete"` |  |
+| onOuChange | string | `"warn"` |  |
 | onUserRemove | string | `"delete"` |  |
 | overlays | list | `[]` |  |
 | persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |

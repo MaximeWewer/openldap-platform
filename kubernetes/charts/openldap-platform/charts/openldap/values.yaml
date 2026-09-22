@@ -739,6 +739,32 @@ reuseOrphanedUserSecret: false
 onUserRemove: delete
 
 # =============================================================================
+# OU drift - an entry is not where `users[].ou` / `groups[].ou` says it is
+# =============================================================================
+# Happens when you change `ou:` on an entry that already exists, or when
+# someone moved it out-of-band.
+#
+#   warn -> log it and reconcile the entry where it actually stands (default)
+#   move -> modrdn the entry under the declared OU, keeping its RDN (CLI >= v2026.7.4)
+#   fail -> stop the sync Job
+#
+# `move` is a real LDAP move: the entry keeps its entryUUID, its password hash
+# and its operational attributes (so the user Secret and the stale-Secret
+# CronJob stay accurate), and the CLI re-points what would otherwise break -
+# the `olcAccess` rules naming the old DN, and the `member` values in every
+# group, when no overlay maintains them. It needs the cn=config bind, which
+# the sync Jobs already mount.
+#
+# Still not automatic, because a DN is an identity: anything outside this
+# release that hardcodes the old DN (an application's bind DN, an external
+# ACL, another directory's referral) keeps naming an entry that moved. Turn it
+# on when you own every consumer, leave it on `warn` otherwise.
+#
+# A group whose cn needs DN escaping (a comma or a backslash inside the name)
+# is never moved - the Job says so and leaves it alone.
+onOuChange: warn
+
+# =============================================================================
 # Groups (groupOfNames - each group MUST have ≥ 1 member per LDAP schema)
 # =============================================================================
 # Applied via `openldap-cli group create` (initial) then reconciled with

@@ -95,6 +95,8 @@ spec:
               value: {{ $ctx.Values.onUserRemove | quote }}
             - name: ON_GROUP_REMOVE
               value: {{ $ctx.Values.onGroupRemove | quote }}
+            - name: ON_OU_CHANGE
+              value: {{ $ctx.Values.onOuChange | quote }}
           resources:
             {{- toYaml $ctx.Values.cli.resources | nindent 12 }}
           volumeMounts:

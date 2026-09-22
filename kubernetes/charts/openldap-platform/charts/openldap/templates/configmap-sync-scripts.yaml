@@ -251,6 +251,35 @@ data:
     }
 
     # -------------------------------------------------------------------------
+    # OU drift policy (values `onOuChange`) - what to do when an entry is not
+    # in the OU its values declare. Only users.sh / groups.sh act on it; the
+    # validation lives here so an unusable value fails on the first Job rather
+    # than on the first drifting entry.
+    # -------------------------------------------------------------------------
+    : "${ON_OU_CHANGE:=warn}"
+    case "$ON_OU_CHANGE" in
+      warn|move|fail) ;;
+      *) DIE "onOuChange=${ON_OU_CHANGE}: expected warn|move|fail" ;;
+    esac
+
+    # `cn=x,ou=users,dc=example,dc=org` -> `ou=users`, and -> `cn=x`.
+    #
+    # Both refuse a DN whose RDN carries an escaped separator (`cn=a\,b`):
+    # cutting on the first comma would then split inside the name, and the
+    # caller has no safe way to rebuild the DN. Such an entry is left alone
+    # rather than moved to a truncated RDN.
+    dn_parent_ou() {
+      case "${1%%,*}" in *\\*) return 1 ;; esac
+      _p=${1#*,}
+      printf '%s' "${_p%",${LDAP_BASE_DN}"}"
+    }
+
+    dn_rdn() {
+      case "${1%%,*}" in *\\*) return 1 ;; esac
+      printf '%s' "${1%%,*}"
+    }
+
+    # -------------------------------------------------------------------------
     # Chart state ConfigMap helpers - used by acls / tree-grants / overlays
     # to track their previously-applied set across upgrades. Data key = phase
     # name (acls | tree-grants | overlays).
@@ -337,6 +366,14 @@ data:
     # entry's own container back, one call at a time.
     export LDAP_USER_OU=""
 
+    # A move re-points the olcAccess rules naming the old DN and the `member`
+    # values in every group; both are decided from cn=config. Loaded only for
+    # `move`, so the other modes keep the plain admin bind - and a release whose
+    # admin Secret carries no config password keeps working.
+    if [ "$ON_OU_CHANGE" = "move" ]; then
+      load_config_bind
+    fi
+
     [ -f /spec/users.json ] || { LOG "no users to reconcile"; }
     COUNT=$(jq 'length' /spec/users.json 2>/dev/null || echo 0)
     LOG "reconciling ${COUNT} user(s)"
@@ -374,15 +411,32 @@ data:
 
       if openldap-cli user info "$UID_VAL" >/dev/null 2>&1; then
         LOG "user ${UID_VAL}: exists - reconciling attributes"
-        # An entry is never moved between OUs: an LDAP move rewrites the DN
-        # every group member, ACL and svc grant points at. Say so instead of
-        # reconciling attributes onto an entry that is not where values claim.
+        # The entry may not be where values now say it should be - a changed
+        # `ou:`, or a hand move. `onOuChange` decides.
         CURRENT_DN=$(user_dn "$UID_VAL")
         case "$CURRENT_DN" in
-          *",${USER_OU},${LDAP_BASE_DN}") : ;;
-          "") : ;;
-          *) LOG "  WARNING: entry is at ${CURRENT_DN}, values ask for ${USER_OU},${LDAP_BASE_DN}"
-             LOG "  -> the chart does not move entries; delete it by hand or fix values" ;;
+          *",${USER_OU},${LDAP_BASE_DN}"|"") : ;;
+          *)
+            case "$ON_OU_CHANGE" in
+              fail)
+                DIE "user ${UID_VAL} is at ${CURRENT_DN}, values ask for ${USER_OU},${LDAP_BASE_DN} - set onOuChange=move to relocate it, or fix values"
+                ;;
+              move)
+                LOG "  moving ${CURRENT_DN} -> ${USER_OU},${LDAP_BASE_DN}"
+                # `user move` is a modrdn keeping the RDN, so the entry keeps
+                # its entryUUID, its password hash and its operational
+                # attributes - the per-user Secret and its pwd-changed-time
+                # marker stay valid. It then re-points the olcAccess rules
+                # naming the old DN and the group `member` values, neither of
+                # which slapd rewrites on its own.
+                openldap-cli user move "$UID_VAL" "${USER_OU},${LDAP_BASE_DN}"
+                ;;
+              *)
+                LOG "  WARNING: entry is at ${CURRENT_DN}, values ask for ${USER_OU},${LDAP_BASE_DN}"
+                LOG "  -> reconciling it where it stands; set onOuChange=move to relocate it"
+                ;;
+            esac
+            ;;
         esac
         [ -n "$GIVEN" ]   && openldap-cli user set "$UID_VAL" givenName "$GIVEN"
         [ -n "$SN" ]      && openldap-cli user set "$UID_VAL" sn "$SN"
@@ -502,6 +556,12 @@ data:
 
     gcli() { ldap_in "" "$GROUP_OU" openldap-cli "$@"; }
 
+    # Same as users.sh: the config bind is only needed to repair the olcAccess
+    # rules a move would otherwise leave naming a DN that no longer exists.
+    if [ "$ON_OU_CHANGE" = "move" ]; then
+      load_config_bind
+    fi
+
     [ -f /spec/groups.json ] || { LOG "no groups to reconcile"; exit 0; }
     COUNT=$(jq 'length' /spec/groups.json)
     LOG "reconciling ${COUNT} group(s)"
@@ -533,15 +593,44 @@ data:
       OU=$(jq -r ".[$i].ou // empty" /spec/groups.json)
       GROUP_OU=$(normalize_ou "${OU:-$DEFAULT_GROUP_OU}")
 
-      # Creating a second groupOfNames with the same cn in another OU would
-      # make every later lookup ambiguous, so stop instead. Moving the entry is
-      # not an option either: its DN is what members, ACLs and svc grants
-      # reference.
+      # The group may already exist somewhere else in the tree. Creating a
+      # second groupOfNames with the same cn would make every later lookup
+      # ambiguous, so this is settled before anything is created: `onOuChange`
+      # says whether to move it, leave it where it is, or stop.
       EXISTING_DN=$(ldap_in "" "" openldap-cli group info "$CN" -o json 2>/dev/null \
         | jq -r '.dn // empty' 2>/dev/null || true)
       case "${EXISTING_DN:-}" in
         ""|*",${GROUP_OU},${LDAP_BASE_DN}") : ;;
-        *) DIE "group ${CN} already exists at ${EXISTING_DN}, values place it in ${GROUP_OU},${LDAP_BASE_DN} - the chart does not move entries; delete it by hand or fix values" ;;
+        *)
+          case "$ON_OU_CHANGE" in
+            fail)
+              DIE "group ${CN} is at ${EXISTING_DN}, values place it in ${GROUP_OU},${LDAP_BASE_DN} - set onOuChange=move to relocate it, or fix values"
+              ;;
+            move)
+              # No `group move` in the CLI, so the generic modrdn: same RDN,
+              # new superior. It re-points the olcAccess rules naming the old
+              # DN. It does NOT repair a `member` value pointing at this group
+              # (a nested group) - the chart never creates those, but an
+              # out-of-band one would need the refint overlay or a hand fix.
+              if ! RDN=$(dn_rdn "$EXISTING_DN"); then
+                DIE "group ${CN} is at ${EXISTING_DN} and its RDN carries an escaped separator - move it by hand, or fix values"
+              fi
+              LOG "group ${CN}: moving ${EXISTING_DN} -> ${GROUP_OU},${LDAP_BASE_DN}"
+              openldap-cli entry rename "$EXISTING_DN" "$RDN" \
+                --newsuperior "${GROUP_OU},${LDAP_BASE_DN}"
+              ;;
+            *)
+              # Reconcile it where it stands: pointing gcli at the declared OU
+              # would miss it and create a duplicate cn one OU over.
+              if ! ACTUAL_OU=$(dn_parent_ou "$EXISTING_DN"); then
+                DIE "group ${CN} is at ${EXISTING_DN} and its RDN carries an escaped separator - move it by hand, or fix values"
+              fi
+              LOG "group ${CN}: WARNING - entry is at ${EXISTING_DN}, values place it in ${GROUP_OU},${LDAP_BASE_DN}"
+              LOG "  -> reconciling it where it stands; set onOuChange=move to relocate it"
+              GROUP_OU="$ACTUAL_OU"
+              ;;
+          esac
+          ;;
       esac
 
       if gcli group info "$CN" >/dev/null 2>&1; then

@@ -437,11 +437,9 @@ Rules the sync Jobs enforce:
   in two OUs is ambiguous and fails the sync. The per-user Secret
   (`<release>-openldap-user-<uid>`) is keyed on the uid alone for the same
   reason.
-* Entries are never moved. Changing `ou:` on an entry that already exists
-  logs a warning for a user, and fails the Job for a group (creating a
-  second `cn` elsewhere would poison every later lookup). A move rewrites
-  the DN that group members, ACLs and `svc grant` rules point at, so it is a
-  hand operation - see below.
+* Changing `ou:` on an entry that already exists is governed by
+  `onOuChange` (`warn` by default, see below). It is never silent: a DN is an
+  identity, and moving one is visible to everything that named it.
 * Group drift removal only looks inside `ou=groups` plus every OU named in
   `groups[].ou`. A `groupOfNames` sitting anywhere else is somebody else's
   and is left alone.
@@ -454,8 +452,59 @@ Rules the sync Jobs enforce:
 
 ### Moving an entry to another OU
 
-The chart will not do it. Do it by hand from an export, so the stored
-password hash comes back unchanged and the per-user Secret stays valid:
+`onOuChange` decides what the `users` / `groups` sync Jobs do when an entry
+is not where its `ou:` says it should be - a changed value, or a hand move:
+
+| Value | Behaviour |
+|-------|-----------|
+| `warn` (default) | Logs it and reconciles the entry **where it stands**. Attributes, members and description are kept up to date at the old DN. |
+| `move` | Relocates the entry under the declared OU. |
+| `fail` | Stops the Job. |
+
+```yaml
+openldap:
+  onOuChange: move
+  users:
+    - uid: grafana
+      ou: service-accounts     # was under ou=users
+      sn: Grafana
+```
+
+`move` is a real LDAP move (modrdn, same RDN, new superior), not a
+delete-and-recreate. The entry keeps its `entryUUID`, its `userPassword`
+hash and its operational attributes - so the per-user Secret stays valid and
+the `pwd-changed-time` marker the stale-Secret CronJob reads is untouched.
+The CLI then repairs what slapd leaves behind on its own:
+
+* the `olcAccess` rules naming the old DN, which would otherwise keep naming
+  a DN that no longer exists and silently grant nothing. This needs the
+  cn=config bind, so `move` is the one mode where the users/groups Jobs load
+  the config password (already in the chart's admin Secret). A rule using
+  `regex=` or `set=` cannot be rewritten safely and is reported for a hand
+  fix instead.
+* the `member` values in every group, when no overlay maintains them.
+  Enabling `refint` makes slapd do it instead:
+
+  ```yaml
+  openldap:
+    overlays:
+      - name: refint
+        enable: true
+  ```
+
+Two limits worth knowing before turning it on:
+
+* **Nothing outside the release is repaired.** An application whose bind DN
+  is the old one, an ACL in another database, a referral from another
+  directory - all keep naming an entry that moved. Leave `onOuChange` on
+  `warn` unless you own every consumer.
+* A group whose `cn` needs DN escaping (a comma or backslash inside the
+  name) is not moved; the Job says so and leaves it alone. Groups nested as
+  a `member` of another group are not repaired either - `refint`, or a hand
+  fix.
+
+Doing it by hand instead (with `onOuChange: warn`), from an export so the
+password hash comes back unchanged:
 
 ```bash
 PW=$(kubectl -n ldap get secret ldap-openldap-admin \
@@ -481,18 +530,14 @@ kubectl -n ldap exec -i ldap-openldap-0 -- \
 # 3. set `ou:` in values, then `helm upgrade`
 ```
 
-`openldap-cli user export --ldif` does the same for a whole OU at once
-(it writes every user under the current user base).
+Unlike `move`, this is a delete-and-recreate: `entryUUID`,
+`createTimestamp` and `pwdChangedTime` are new. The password itself is
+unchanged - the hash was carried over - but with
+`staleUserSecretCleanup.enabled: true` the new `pwdChangedTime` no longer
+matches the marker stored on the Secret, so the CronJob reads the Secret as
+spent and deletes it on its next run. Hand the credential out first, or run
+one `helm upgrade` with the user removed from values and put back, to have
+the chart re-issue a password and a fresh marker.
 
-Group entries still name the old DN in `member` after step 2, and without
-the `refint` overlay nothing in slapd repairs them. The next `groups` sync
-Job does: it compares DNs, so it sees the stale value and replaces the
-attribute. Enable `refint` if you want slapd to handle it at delete time
-instead:
-
-```yaml
-openldap:
-  overlays:
-    - name: refint
-      enable: true
-```
+Group memberships pointing at the old DN are repaired by the next `groups`
+sync Job in both cases - it compares `member` as full DNs.
