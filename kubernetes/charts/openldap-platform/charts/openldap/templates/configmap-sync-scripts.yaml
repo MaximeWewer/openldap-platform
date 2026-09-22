@@ -127,6 +127,48 @@ data:
     }
 
     # -------------------------------------------------------------------------
+    # Per-entry OU support (values `users[].ou` / `groups[].ou`).
+    #
+    # The CLI takes its user and group containers from LDAP_USER_OU /
+    # LDAP_GROUP_OU, and only two verbs read them to BUILD a DN: `user add` and
+    # `group create`. Every other verb (info, set, delete, ppolicy assign,
+    # add-member, and the member resolution behind it) locates the entry with a
+    # subtree search from its container - so clearing the variable widens that
+    # search to the whole base DN and finds the entry in whatever OU it lives.
+    #
+    # `ldap_in <user-ou> <group-ou> <cmd...>` scopes both for one command; an
+    # empty string means "search from the base DN".
+    # -------------------------------------------------------------------------
+    DEFAULT_USER_OU="${LDAP_USER_OU}"
+    DEFAULT_GROUP_OU="${LDAP_GROUP_OU}"
+
+    ldap_in() {
+      _uou="$1"; _gou="$2"; shift 2
+      LDAP_USER_OU="$_uou" LDAP_GROUP_OU="$_gou" "$@"
+    }
+
+    # `service-accounts`, `ou=service-accounts` and `ou=apps,ou=service-accounts`
+    # all normalise to a DN fragment relative to the base DN. Empty stays empty.
+    normalize_ou() {
+      _ou=$(printf '%s' "${1:-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+      [ -n "$_ou" ] || return 0
+      case "$_ou" in
+        ou=*) printf '%s' "$_ou" ;;
+        *)    printf 'ou=%s' "$_ou" ;;
+      esac
+    }
+
+    # The chart does not create containers on the fly: bootstrap owns them
+    # (directory.organizationalUnits). Failing here beats a bare "no such
+    # object" from the add, which says nothing about what to fix.
+    ensure_ou() {
+      [ -n "${1:-}" ] || return 0
+      openldap-cli search '(objectClass=*)' --base "$1,${LDAP_BASE_DN}" \
+        --scope base -o json >/dev/null 2>&1 && return 0
+      DIE "$1,${LDAP_BASE_DN} does not exist - add it to directory.organizationalUnits (or create it out-of-band) before declaring entries in it"
+    }
+
+    # -------------------------------------------------------------------------
     # Secret helpers (backend=kubernetes).
     # -------------------------------------------------------------------------
     secret_name_for_user() { printf '%s-user-%s' "${RELEASE_FULLNAME}" "$1"; }
@@ -147,9 +189,19 @@ data:
     # an admin, the user) has changed the password and the stored Secret is
     # stale. Empty for entries never written over LDAP - slapadd bypasses the
     # overlay, so seeded users have no pwdChangedTime at all.
+    #
+    # The DN is resolved rather than assembled from LDAP_USER_OU: with
+    # `users[].ou` the entry may sit anywhere under the base DN.
+    user_dn() {
+      ldap_in "" "$DEFAULT_GROUP_OU" openldap-cli user info "$1" -o json 2>/dev/null \
+        | jq -r '.dn // empty' 2>/dev/null || true
+    }
+
     user_pwd_changed_time() {
+      _dn=$(user_dn "$1")
+      [ -n "$_dn" ] || return 0
       openldap-cli search '(objectClass=*)' \
-        --base "cn=$1,${LDAP_USER_OU},${LDAP_BASE_DN}" \
+        --base "$_dn" \
         --scope base --operational -o json 2>/dev/null \
         | jq -r '.entries[0].attrs.pwdChangedTime[0] // empty' 2>/dev/null || true
     }
@@ -266,7 +318,7 @@ data:
     LOG "ppolicy sync done"
 
   # ---------------------------------------------------------------------------
-  # users.sh - reconciles users under ou=users.
+  # users.sh - reconciles users under ou=users, or under `users[].ou`.
   #   * create-or-update every user in values.users
   #   * store generated passwords in per-user Secrets (kubernetes backend)
   #   * on removal from values.users, either delete or lock based on
@@ -278,9 +330,23 @@ data:
     . /scripts/common.sh
     wait_for_ldap
 
+    # Every verb here but `user add` resolves its target with a subtree search
+    # from LDAP_USER_OU. Clearing it starts that search at the base DN, so a
+    # user declared with its own `ou:` is found wherever it lives - including
+    # in the drift branch, which only knows a uid. `user add` is handed the
+    # entry's own container back, one call at a time.
+    export LDAP_USER_OU=""
+
     [ -f /spec/users.json ] || { LOG "no users to reconcile"; }
     COUNT=$(jq 'length' /spec/users.json 2>/dev/null || echo 0)
     LOG "reconciling ${COUNT} user(s)"
+
+    # Check every distinct target container up front: a missing OU should fail
+    # the Job before half the users have been created.
+    jq -r '[.[] | (.ou // "")] | unique[]' /spec/users.json 2>/dev/null > /tmp/user-ous.txt || true
+    while read -r ou; do
+      ensure_ou "$(normalize_ou "${ou:-$DEFAULT_USER_OU}")"
+    done < /tmp/user-ous.txt
 
     # Track which uids we own (from values) - used later for drift cleanup.
     DECLARED=/tmp/declared-users.txt
@@ -298,6 +364,8 @@ data:
       DISPLAY=$(jq -r ".[$i].displayName // empty" /spec/users.json)
       POLICY=$(jq -r ".[$i].policy // empty" /spec/users.json)
       EXISTING_SECRET=$(jq -r ".[$i].existingSecret // empty" /spec/users.json)
+      OU=$(jq -r ".[$i].ou // empty" /spec/users.json)
+      USER_OU=$(normalize_ou "${OU:-$DEFAULT_USER_OU}")
 
       # Extra attrs to pass as repeated `--set k=v`.
       EXTRA_KV=$(jq -r --argjson i "$i" '
@@ -306,6 +374,16 @@ data:
 
       if openldap-cli user info "$UID_VAL" >/dev/null 2>&1; then
         LOG "user ${UID_VAL}: exists - reconciling attributes"
+        # An entry is never moved between OUs: an LDAP move rewrites the DN
+        # every group member, ACL and svc grant points at. Say so instead of
+        # reconciling attributes onto an entry that is not where values claim.
+        CURRENT_DN=$(user_dn "$UID_VAL")
+        case "$CURRENT_DN" in
+          *",${USER_OU},${LDAP_BASE_DN}") : ;;
+          "") : ;;
+          *) LOG "  WARNING: entry is at ${CURRENT_DN}, values ask for ${USER_OU},${LDAP_BASE_DN}"
+             LOG "  -> the chart does not move entries; delete it by hand or fix values" ;;
+        esac
         [ -n "$GIVEN" ]   && openldap-cli user set "$UID_VAL" givenName "$GIVEN"
         [ -n "$SN" ]      && openldap-cli user set "$UID_VAL" sn "$SN"
         [ -n "$MAIL" ]    && openldap-cli user set "$UID_VAL" mail "$MAIL"
@@ -315,7 +393,7 @@ data:
           openldap-cli user set "$UID_VAL" "$K" "$V"
         done
       else
-        LOG "user ${UID_VAL}: creating"
+        LOG "user ${UID_VAL}: creating in ${USER_OU},${LDAP_BASE_DN}"
         # Determine password source.
         if [ -n "$EXISTING_SECRET" ]; then
           PW=$(kubectl -n "${RELEASE_NAMESPACE}" get secret "$EXISTING_SECRET" \
@@ -356,10 +434,12 @@ data:
         for kv in $EXTRA_KV; do
           set -- "$@" --set "$kv"
         done
+        # `user add` is the one verb that BUILDS the DN from LDAP_USER_OU,
+        # so this is where the entry's own container has to be in scope.
         if [ "${PASSWORD_FILES:-false}" = "true" ]; then
-          printf '%s' "$PW" | openldap-cli user add "$@"
+          printf '%s' "$PW" | ldap_in "$USER_OU" "$DEFAULT_GROUP_OU" openldap-cli user add "$@"
         else
-          openldap-cli user add "$@"
+          ldap_in "$USER_OU" "$DEFAULT_GROUP_OU" openldap-cli user add "$@"
         fi
 
         # Persist password ONLY when the chart owns it (no existingSecret).
@@ -405,7 +485,8 @@ data:
     LOG "users sync done"
 
   # ---------------------------------------------------------------------------
-  # groups.sh - reconciles groupOfNames entries under ou=groups.
+  # groups.sh - reconciles groupOfNames entries under ou=groups, or under
+  # `groups[].ou`.
   # ---------------------------------------------------------------------------
   groups.sh: |
     #!/bin/sh
@@ -413,9 +494,28 @@ data:
     . /scripts/common.sh
     wait_for_ldap
 
+    # Members are resolved by searching from the base DN, so a group can hold
+    # users that live in different OUs. Group lookups stay scoped to the OU the
+    # values declare (gcli below) - widening them would let an unrelated
+    # groupOfNames with the same cn elsewhere in the tree hijack the reconcile.
+    export LDAP_USER_OU=""
+
+    gcli() { ldap_in "" "$GROUP_OU" openldap-cli "$@"; }
+
     [ -f /spec/groups.json ] || { LOG "no groups to reconcile"; exit 0; }
     COUNT=$(jq 'length' /spec/groups.json)
     LOG "reconciling ${COUNT} group(s)"
+
+    # Distinct target containers - checked up front, then reused as the exact
+    # set of OUs the drift pass is allowed to look into.
+    MANAGED_OUS=/tmp/group-ous.txt
+    jq -r '[.[] | (.ou // "")] | unique[]' /spec/groups.json 2>/dev/null > /tmp/group-ous.raw || true
+    : > "$MANAGED_OUS"
+    while read -r ou; do
+      ou=$(normalize_ou "${ou:-$DEFAULT_GROUP_OU}")
+      ensure_ou "$ou"
+      echo "$ou" >> "$MANAGED_OUS"
+    done < /tmp/group-ous.raw
 
     DECLARED=/tmp/declared-groups.txt
     : > "$DECLARED"
@@ -430,44 +530,64 @@ data:
       [ -n "$MEMBERS" ] || DIE "group ${CN} has no members (groupOfNames requires ≥ 1)"
 
       DESC=$(jq -r ".[$i].description // empty" /spec/groups.json)
+      OU=$(jq -r ".[$i].ou // empty" /spec/groups.json)
+      GROUP_OU=$(normalize_ou "${OU:-$DEFAULT_GROUP_OU}")
 
-      if openldap-cli group info "$CN" >/dev/null 2>&1; then
+      # Creating a second groupOfNames with the same cn in another OU would
+      # make every later lookup ambiguous, so stop instead. Moving the entry is
+      # not an option either: its DN is what members, ACLs and svc grants
+      # reference.
+      EXISTING_DN=$(ldap_in "" "" openldap-cli group info "$CN" -o json 2>/dev/null \
+        | jq -r '.dn // empty' 2>/dev/null || true)
+      case "${EXISTING_DN:-}" in
+        ""|*",${GROUP_OU},${LDAP_BASE_DN}") : ;;
+        *) DIE "group ${CN} already exists at ${EXISTING_DN}, values place it in ${GROUP_OU},${LDAP_BASE_DN} - the chart does not move entries; delete it by hand or fix values" ;;
+      esac
+
+      if gcli group info "$CN" >/dev/null 2>&1; then
         LOG "group ${CN}: exists - reconciling members"
         # Current members: extract UID (RDN value) from each member DN
         # (member: cn=alice,ou=users,...).
-        CURRENT=$(openldap-cli group info "$CN" -o json 2>/dev/null \
+        CURRENT=$(gcli group info "$CN" -o json 2>/dev/null \
           | jq -r '.attrs.member[]? // empty' \
           | sed -n 's/^cn=\([^,]*\),.*/\1/p' \
           | sort -u)
-        DECLARED_SET=$(printf '%s\n' $MEMBERS | sort -u)
-        TO_ADD=$(comm -23 <(printf '%s\n' "$DECLARED_SET") <(printf '%s\n' "$CURRENT") || true)
-        TO_REM=$(comm -13 <(printf '%s\n' "$DECLARED_SET") <(printf '%s\n' "$CURRENT") || true)
+        # Plain files, not `comm <(...) <(...)`: the Jobs run /bin/sh, which is
+        # busybox ash on the alpine image, and it has no process substitution -
+        # the script died with `Syntax error: "(" unexpected` before reaching
+        # the first membership change.
+        printf '%s\n' $MEMBERS | sort -u > /tmp/members-declared.txt
+        printf '%s\n' "$CURRENT" | sort -u > /tmp/members-current.txt
+        TO_ADD=$(comm -23 /tmp/members-declared.txt /tmp/members-current.txt || true)
+        TO_REM=$(comm -13 /tmp/members-declared.txt /tmp/members-current.txt || true)
         for u in $TO_ADD; do
           LOG "  add-member ${u}"
-          openldap-cli group add-member "$CN" "$u"
+          gcli group add-member "$CN" "$u"
         done
         for u in $TO_REM; do
           LOG "  remove-member ${u}"
-          openldap-cli group remove-member "$CN" "$u"
+          gcli group remove-member "$CN" "$u"
         done
       else
-        LOG "group ${CN}: creating with ${MEMBERS}"
+        LOG "group ${CN}: creating in ${GROUP_OU},${LDAP_BASE_DN} with ${MEMBERS}"
         # `group create` requires at least one --member; extra members added after.
         FIRST=$(printf '%s\n' $MEMBERS | head -n 1)
         REST=$(printf '%s\n' $MEMBERS | tail -n +2)
-        openldap-cli group create "$CN" --member "$FIRST"
+        # `group create` is the one verb that BUILDS the DN from
+        # LDAP_GROUP_OU, so the entry's own container has to be in scope.
+        gcli group create "$CN" --member "$FIRST"
         for u in $REST; do
-          openldap-cli group add-member "$CN" "$u"
+          gcli group add-member "$CN" "$u"
         done
       fi
 
       # Description reconcile (CLI ≥ v2026.7.4).
       if [ -n "$DESC" ]; then
-        CURRENT_DESC=$(openldap-cli group info "$CN" -o json 2>/dev/null \
+        CURRENT_DESC=$(gcli group info "$CN" -o json 2>/dev/null \
           | jq -r '.attrs.description[0]? // empty')
         if [ "$CURRENT_DESC" != "$DESC" ]; then
           LOG "  set description=${DESC}"
-          openldap-cli group set "$CN" description "$DESC"
+          gcli group set "$CN" description "$DESC"
         fi
       fi
 
@@ -475,20 +595,35 @@ data:
     done
 
     LOG "checking drift - onGroupRemove=${ON_GROUP_REMOVE}"
+    # Scoped to the OUs values declare, never the whole tree: a groupOfNames
+    # sitting in an OU no entry mentions is somebody else's and must survive.
     # groups list text form: one CN per line, plus a trailing "(N groups)" tally.
-    KNOWN=$(openldap-cli groups list 2>/dev/null | grep -v '^(' | grep -v '^$' || true)
-    for cn in $KNOWN; do
+    # Each line is "<ou> <cn>" so the removal runs in the container the group
+    # was found in. Nested containers can list the same group twice; `sort -u`
+    # on the pair keeps one line per (ou, cn).
+    KNOWN=/tmp/known-groups.txt
+    : > "$KNOWN"
+    while read -r ou; do
+      [ -n "$ou" ] || continue
+      ldap_in "" "$ou" openldap-cli groups list 2>/dev/null \
+        | grep -v '^(' | grep -v '^$' \
+        | sed "s|^|${ou} |" >> "$KNOWN" || true
+    done < "$MANAGED_OUS"
+    sort -u "$KNOWN" -o "$KNOWN"
+
+    while read -r ou cn; do
+      [ -n "${cn:-}" ] || continue
       if ! grep -Fxq "$cn" "$DECLARED"; then
         case "$ON_GROUP_REMOVE" in
           delete)
-            LOG "drift: deleting group ${cn}"
-            openldap-cli group delete "$cn" || true
+            LOG "drift: deleting group ${cn} from ${ou},${LDAP_BASE_DN}"
+            ldap_in "" "$ou" openldap-cli group delete "$cn" || true
             ;;
           keep) : ;;
           *) DIE "onGroupRemove=${ON_GROUP_REMOVE}: expected delete|keep" ;;
         esac
       fi
-    done
+    done < "$KNOWN"
     LOG "groups sync done"
 
   # ---------------------------------------------------------------------------
@@ -787,6 +922,10 @@ data:
     set -eu
     . /scripts/common.sh
     wait_for_ldap
+
+    # A Secret only carries a uid, and `users[].ou` means the entry behind it
+    # may sit outside ou=users - resolve from the base DN.
+    export LDAP_USER_OU=""
 
     # A chart-managed user Secret holds the password the chart generated at
     # creation time. Nothing writes back to it: when the user changes their

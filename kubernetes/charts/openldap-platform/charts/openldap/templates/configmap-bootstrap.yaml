@@ -663,9 +663,10 @@ data:
     description: {{ .Values.directory.description }}
     {{- end }}
     {{ range .Values.directory.organizationalUnits }}
-    dn: ou={{ . }},{{ $.Values.directory.suffix }}
+    {{- $ouPath := trimPrefix "ou=" . }}
+    dn: ou={{ $ouPath }},{{ $.Values.directory.suffix }}
     objectClass: organizationalUnit
-    ou: {{ . }}
+    ou: {{ index (splitList "," $ouPath) 0 | trimPrefix "ou=" }}
     {{ end }}
     {{- if and .Values.ppolicy.enabled .Values.ppolicy.defaultPolicy.create }}
     {{- with .Values.ppolicy.defaultPolicy }}

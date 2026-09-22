@@ -382,3 +382,66 @@ rolling restart so existing pods reconcile their cn=config peer list).
 subsequent `helm upgrade` runs will conflict on that field
 (kube-controller-manager owns it). Bump `openldap.replicaCount` in
 values to match the live count for each upgrade.
+
+## 7. Service accounts in their own OU
+
+`users[].ou` / `groups[].ou` place a declarative entry outside the default
+`ou=users` / `ou=groups`. Typical use: keep machine identities out of the
+people tree so an ACL or a `treeGrants` entry can target one and not the
+other.
+
+```yaml
+openldap:
+  directory:
+    organizationalUnits:
+      - users
+      - groups
+      - service-accounts
+      - policies
+      # Nesting works; list the parent first, the LDIF loads top to bottom.
+      - apps,ou=service-accounts
+
+  users:
+    - uid: alice                          # a person, default ou=users
+      givenName: Alice
+      sn: Wonderland
+    - uid: grafana                        # a service account
+      ou: service-accounts
+      sn: Grafana
+      displayName: "Grafana (service account)"
+    - uid: billing
+      ou: ou=apps,ou=service-accounts     # `ou=` prefix optional
+      sn: Billing
+
+  groups:
+    - cn: devs
+      members: [alice]
+    - cn: readers                         # a group of machines, kept aside
+      ou: service-accounts
+      description: Service accounts allowed to read the people tree
+      members: [grafana, billing]         # members may live in any OU
+
+  treeGrants:
+    - name: grafana
+      tree: "ou=users,dc=example,dc=org"
+      access: read
+```
+
+Rules the sync Jobs enforce:
+
+* The target OU must already exist. The Job checks every distinct OU before
+  creating anything and fails with the missing DN rather than leaving half
+  the users created - add it to `directory.organizationalUnits`.
+* `uid` and `cn` must be unique across OUs. Every verb but the initial
+  create resolves an entry by searching from the base DN, so the same `uid`
+  in two OUs is ambiguous and fails the sync. The per-user Secret
+  (`<release>-openldap-user-<uid>`) is keyed on the uid alone for the same
+  reason.
+* Entries are never moved. Changing `ou:` on an entry that already exists
+  logs a warning for a user, and fails the Job for a group (creating a
+  second `cn` elsewhere would poison every later lookup). Delete the entry
+  by hand, or revert the value - a move rewrites the DN that group members,
+  ACLs and `svc grant` rules point at.
+* Group drift removal only looks inside `ou=groups` plus every OU named in
+  `groups[].ou`. A `groupOfNames` sitting anywhere else is somebody else's
+  and is left alone.

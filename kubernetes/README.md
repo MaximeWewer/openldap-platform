@@ -72,6 +72,8 @@ graph TD
     root --> pol["ou=policies<br/><i>Password policies</i>"]
 ```
 
+The four base OUs come from `directory.organizationalUnits` and may be extended or nested (`apps,ou=service-accounts`). Declarative entries pick their container with `users[].ou` / `groups[].ou` - see [recipes.md §7](docs/recipes.md#7-service-accounts-in-their-own-ou).
+
 ACL matrix on the main database (`dc=example,dc=org`) - chart defaults, overridable via `customAcls` (replace) or `extraAcls` (append):
 
 | Identity                        | userPassword | subtree (`dc=…`)         | ou=policies |
@@ -187,7 +189,7 @@ Admin + config-admin + replicator + per-user passwords are **auto-generated on f
 | Admin (data rootDN)                         | `<release>-openldap-admin`                | `admin-password`          | `cn=admin,dc=example,dc=org`                                          |
 | Config admin (cn=config rootDN)             | `<release>-openldap-admin`                | `config-admin-password`   | `cn=adminconfig,cn=config`                                            |
 | Replicator (HA only)                        | `<release>-openldap-replicator`           | `replicator-password`     | `cn=replicator,ou=service-accounts,dc=example,dc=org`                 |
-| Per-user (created by users sync Job)        | `<release>-openldap-user-<uid>`           | `password`                | `cn=<uid>,ou=users,dc=example,dc=org`                                 |
+| Per-user (created by users sync Job)        | `<release>-openldap-user-<uid>`           | `password`                | `cn=<uid>,<users[].ou>,dc=example,dc=org` (default `ou=users`)        |
 | phpLDAPadmin `APP_KEY`                      | `<release>-phpldapadmin-app-key`          | `app-key`                 | (Laravel session key)                                                 |
 | SSP token keyphrase                         | `<release>-self-service-password-keyphrase` | `keyphrase`             | (token HMAC secret)                                                   |
 
@@ -214,8 +216,8 @@ Six values blocks (`openldap.overlays`, `openldap.policies`, `openldap.acls`, `o
 | 5 | `ppolicy` | `ppolicy set` | Idempotent create/update of policy templates under `ou=policies`. |
 | 8 | `acls` | `config acl grant/revoke` | Chart-owned grantee (group|dn); revoke-then-grant on each upgrade. |
 | 9 | `tree-grants` | `svc grant/revoke` | Tree-scoped ACL helper - container + entry rules for a service account. |
-| 10 | `users` | `user add/set/delete` | Auto-generated passwords land in `<release>-openldap-user-<uid>` Secrets. |
-| 15 | `groups` | `group create/add-member/remove-member/set` | Reconciles `members` + description. |
+| 10 | `users` | `user add/set/delete` | Auto-generated passwords land in `<release>-openldap-user-<uid>` Secrets. `ou:` places the entry outside `ou=users`. |
+| 15 | `groups` | `group create/add-member/remove-member/set` | Reconciles `members` + description. `ou:` places the group outside `ou=groups`; drift removal only looks inside the declared OUs. |
 
 Drift removal for `acls` / `treeGrants` / `overlays` uses a chart-managed ConfigMap `<release>-openldap-sync-state` (one JSON key per phase) that snapshots the previously-applied set - entries removed from `values.yaml` on the next upgrade are revoked / disabled automatically.
 
@@ -240,10 +242,13 @@ openldap:
       policy: strong             # optional - triggers `ppolicy assign`
       attrs:                     # optional - free-form extra `user set`
         title: Engineer
+    - uid: grafana
+      ou: service-accounts       # optional - default `users`, must already exist
+      sn: Grafana
   groups:
     - cn: devs
       description: Development team
-      members: [alice, bob]      # UIDs
+      members: [alice, bob]      # UIDs, resolved in any OU
     - cn: readers
       description: Read-only group
       members: [alice]
@@ -264,6 +269,8 @@ openldap:
 ```
 
 Passwords per user land in `<release>-openldap-user-<uid>`. Attribute changes reconcile on every upgrade. Group membership is expressed on the group side; the `memberOf` overlay auto-populates the user entry.
+
+`uid` and `cn` must be unique across OUs - every verb but the initial create resolves an entry by searching from the base DN, and the per-user Secret is keyed on the uid alone. Entries are never moved: changing `ou:` on an existing entry warns (user) or fails the Job (group), since the DN is what `member`, ACLs and `svc grant` rules point at.
 
 The sync Jobs install `openldap-cli` + `kubectl` from GitHub / dl.k8s.io into a plain Alpine image at Job startup - no custom image build required. Their ServiceAccount is scoped strictly to Secret CRUD, ConfigMap get/create/patch for the sync-state (when `acls`/`treeGrants`/`overlays` are used), and `statefulsets/patch` when TLS renewal needs a rolling restart - all in the release namespace.
 
@@ -617,7 +624,7 @@ Operator handbook - task-oriented, deep-dive:
 
 | Doc                                        | When to open                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------- |
-| [`docs/recipes.md`](docs/recipes.md)                       | Copy-paste values overlays per shape (dev, small prod, multi-DC, GitOps, ExternalSecret) |
+| [`docs/recipes.md`](docs/recipes.md)                       | Copy-paste values overlays per shape (dev, small prod, multi-DC, GitOps, ExternalSecret, autoscaling, service-account OUs) |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md)       | 23 real failure modes with the exact `kubectl` diagnostic + fix     |
 | [`docs/upgrade-uninstall.md`](docs/upgrade-uninstall.md)   | Rolling upgrade, rollback caveats, keep-vs-prune Secrets, purge script |
 | [`docs/backup-restore.md`](docs/backup-restore.md)         | DR playbook, full-restore recipe, HA-aware restore                  |

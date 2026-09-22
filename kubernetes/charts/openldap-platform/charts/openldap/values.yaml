@@ -49,7 +49,15 @@ directory:
   description: ""
 
   # Base OUs created during bootstrap.
-  # Names are relative to the suffix (dc=example,dc=org -> ou=users,dc=example,dc=org).
+  # Names are relative to the suffix (dc=example,dc=org -> ou=users,dc=example,dc=org)
+  # and may be nested - `apps,ou=service-accounts` becomes
+  # ou=apps,ou=service-accounts,dc=example,dc=org. List a parent before its
+  # children: the LDIF is loaded top to bottom and a child whose parent does not
+  # exist yet is rejected. A leading `ou=` is accepted and stripped.
+  #
+  # Every OU listed here is a valid target for `users[].ou` / `groups[].ou`,
+  # which is how a declarative entry lands somewhere other than ou=users /
+  # ou=groups (a service account under ou=service-accounts, say).
   organizationalUnits:
     - users
     - groups
@@ -680,6 +688,18 @@ policies: []
 # Read it to hand out the initial credential. Do not wire it into anything that
 # needs a working password later on. With ppolicy.defaultPolicy.mustChange on
 # (the default) the generated password is single-use anyway.
+#
+# `ou` places the entry outside the default ou=users - typically a service
+# account under ou=service-accounts. It must name an OU that already exists
+# (see directory.organizationalUnits); the sync Job checks and fails loudly
+# rather than creating containers behind your back. `users` and `ou=users` are
+# both accepted, nesting works (`ou=apps,ou=service-accounts`), and the suffix
+# is never part of it.
+#
+# uids must stay unique ACROSS OUs: every other operation (reconcile, ppolicy
+# assign, group membership, drift removal) resolves a user by searching from
+# the base DN, so the same uid in two OUs is ambiguous and fails the sync. The
+# per-user Secret is named after the uid alone for the same reason.
 users: []
 # Example:
 #   users:
@@ -697,6 +717,10 @@ users: []
 #     - uid: bob
 #       givenName: Bob
 #       sn: Builder
+#     - uid: grafana                         # a service account, not a person
+#       ou: service-accounts                 # optional (default: users)
+#       sn: Grafana
+#       displayName: "Grafana (service account)"
 
 # What happens when a user is removed from the values.yaml on upgrade.
 #   delete -> `openldap-cli user delete`
@@ -718,8 +742,15 @@ onUserRemove: delete
 # Groups (groupOfNames - each group MUST have ≥ 1 member per LDAP schema)
 # =============================================================================
 # Applied via `openldap-cli group create` (initial) then reconciled with
-# `group add-member` / `group remove-member`. `members` lists user UIDs;
-# they are translated to full DNs at sync time using values.userOU.
+# `group add-member` / `group remove-member`. `members` lists user UIDs; they
+# are resolved to full DNs at sync time by searching from the base DN, so a
+# group may mix members living in different OUs.
+#
+# `ou` places the group outside the default ou=groups, same rules as
+# `users[].ou`: the OU must already exist, and cns must stay unique across the
+# OUs the chart manages. Drift removal only ever looks inside ou=groups plus
+# every OU named here - a group sitting in an OU no entry declares is never
+# touched.
 groups: []
 # Example:
 #   groups:
@@ -729,6 +760,10 @@ groups: []
 #     - cn: admins
 #       description: Administrators
 #       members: [alice]
+#     - cn: readers
+#       ou: service-accounts                 # optional (default: groups)
+#       description: Service accounts allowed to read the tree
+#       members: [grafana]
 
 # Removed groups: same knob as users.
 onGroupRemove: delete

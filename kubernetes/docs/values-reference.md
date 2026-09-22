@@ -43,6 +43,7 @@ Starting overlay if you want to skim before opening the full tables.
 | `openldap.readOnlyReplicas.count` | `0` | Additional read-only consumer pool |
 | `openldap.directory.suffix` | `dc=example,dc=org` | Root of the tree |
 | `openldap.directory.schemas` | `[cosine, inetorgperson, dyngroup]` | Add `nis` for POSIX accounts |
+| `openldap.directory.organizationalUnits` | `[users, groups, service-accounts, policies]` | Base OUs, relative to the suffix; nesting allowed (`apps,ou=service-accounts`), parent first |
 | `openldap.admin.bindDN` | `cn=admin,dc=example,dc=org` | rootDN of the main DB |
 | `openldap.admin.existingSecret` | `""` | Point at ESO / SealedSecret in prod |
 | `openldap.persistence.size` | `10Gi` | PVC size per replica |
@@ -72,7 +73,9 @@ Starting overlay if you want to skim before opening the full tables.
 | `openldap.podAntiAffinityPreset` | `""` | `""` \| `soft` \| `hard` - spread across nodes |
 | `openldap.podDisruptionBudget.enabled` | `auto` | Enabled iff HA |
 | `openldap.users` | `[]` | Declarative user list (sync Job reconciles) |
+| `openldap.users[].ou` | `users` | OU the entry is created in - e.g. `service-accounts`; must already exist |
 | `openldap.groups` | `[]` | Declarative group list |
+| `openldap.groups[].ou` | `groups` | OU the group is created in; drift removal only looks in the OUs declared here |
 | `openldap.policies` | `[]` | Declarative ppolicy templates |
 | `openldap.onUserRemove` | `delete` | `delete` \| `lock` |
 | `openldap.existingBootstrapConfigMap` | `""` | Escape hatch - full bootstrap CM override |
