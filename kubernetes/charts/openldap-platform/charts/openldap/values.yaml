@@ -3,7 +3,16 @@
 # =============================================================================
 
 image:
-  # Runtime image - distroless, only runs slapd.
+  # Runtime image - distroless, only runs slapd. It also supplies the slapadd
+  # that seeds the database, so this tag decides the on-disk format.
+  #
+  # NOTE: `cleanstart/openldap` no longer publishes any 2.6 tag - 2.7.0 and
+  # 2.7.1 are what is left, and 2.7 cannot open a database written by 2.6.
+  # Moving there is a dump and reload; see `majorUpgrade` below and
+  # docs/migrate-2.6-to-2.7.md. It also changes the image's ldap account from
+  # 101:102 to 102:103, so securityContext.runAsUser / runAsGroup and
+  # podSecurityContext.fsGroup move with it - the chart refuses to render a
+  # mismatch rather than let slapd die on its own data volume.
   repository: ghcr.io/maximewewer/openldap
   tag: "2.7.1"
   pullPolicy: IfNotPresent
@@ -16,9 +25,17 @@ image:
 command: []
 args: []
 
-# Bootstrap init image - needs a shell + slappasswd + slapadd.
-# Alpine's openldap package ships all required binaries and schemas; the
-# initContainer installs them at runtime so no custom image build is needed.
+# Bootstrap init image - needs a shell and slappasswd.
+#
+# It RENDERS the LDIFs; it no longer loads them. back-mdb's on-disk format is
+# tied to the OpenLDAP major, so the `slapadd` that writes the database has to
+# be the one slapd will read it with - and that binary only exists in
+# `image` above. No base image packages matching tooling either (Alpine 3.24
+# and edge both sit on 2.6, Debian sid on 2.6.14), so the chart runs slapadd
+# out of the server image in two further init containers and keeps this one
+# for the shell work.
+#
+# `slappasswd` stays here on purpose: its {SSHA} output is version-neutral.
 initImage:
   repository: alpine
   tag: "3.24"
@@ -937,6 +954,69 @@ aclLintCronJob:
   #   databases:
   #     - "olcDatabase={1}mdb,cn=config"
   #     - "olcDatabase={0}config,cn=config"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
+
+# =============================================================================
+# Major OpenLDAP upgrade (2.6 -> 2.7) - automatic dump and reload
+# =============================================================================
+# back-mdb's on-disk format changed between 2.6 and 2.7: slapd 2.7 refuses to
+# open a data directory written by 2.6 and the pod never starts
+#
+#   mdb_db_open: database "<suffix>" cannot be opened:
+#   MDB_INVALID: File is not an LMDB file (-30793)
+#
+# so a major bump of `image.tag` cannot be a rolling update. With this on, the
+# chart performs the dump and reload itself, and ONLY when the major actually
+# changes - a patch or minor bump, or any upgrade that does not move it, skips
+# every step below.
+#
+# What runs, in order, on a `helm upgrade` that moves the major:
+#   1. pre-upgrade Job   - reads the RUNNING server's version from cn=Monitor,
+#                          and if it differs from image.tag, dumps the data
+#                          tree over LDAP as the rootDN onto the migration
+#                          volume. The upgrade stops here if the dump fails,
+#                          so nothing is touched.
+#   2. bootstrap         - sees the major change AND a dump that describes this
+#                          release, this suffix and a non-empty tree, then
+#                          rebuilds the data directory empty.
+#   3. post-upgrade Job  - reloads the dump over LDAP, then verifies the entry
+#                          count and the password hashes against the manifest.
+#
+# `backup restore` sends the Relax control, so password hashes are restored as
+# they are and users keep the credentials they already have.
+#
+# What does NOT carry over: entryUUID, entryCSN and contextCSN. The reloaded
+# tree is a new directory, so in HA every replica is reseeded from it - no 2.7
+# node is left to syncrepl from a 2.6 peer. ppolicy timers (pwdChangedTime)
+# are gone too, which matters when staleUserSecretCleanup is on: the per-user
+# Secrets stop matching and the CronJob deletes them as spent.
+#
+# Left off, a major bump simply fails the bootstrap with a message naming both
+# versions, and the data is untouched - roll image.tag back and nothing is lost.
+majorUpgrade:
+  enabled: false
+
+  # Where the dump lands. Its PVC carries helm.sh/resource-policy: keep, so
+  # the LDIF outlives the release and a failed migration never leaves you
+  # without a copy. Size it for an LDIF of the whole tree, not for the mdb.
+  persistence:
+    size: 2Gi
+    storageClass: ""
+    existingClaim: ""
+
+  # How long the restore waits for the Service to start answering from the new
+  # version. Helm fires post-upgrade hooks as soon as the resources are
+  # applied, so without `helm upgrade --wait` the StatefulSet may still be
+  # rolling and the old pod still serving.
+  rolloutTimeoutSeconds: 600
+
+  # Refuse to reload a dump older than this. The window exists because the
+  # dump is taken from the live server during the upgrade: a stale one would
+  # silently roll the directory back to whenever it was written.
+  maxDumpAgeMinutes: 120
+
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits:   { cpu: 500m, memory: 256Mi }

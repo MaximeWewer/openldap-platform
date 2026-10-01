@@ -13,7 +13,7 @@ is never needed (external-secrets integration delegates to ESO's own
 controller SA rather than expanding this Role).
 */ -}}
 {{- $needScaleWatcher := and (eq .Values.mode "multi-master") (or .Values.hpa.enabled .Values.scaleSchedule) -}}
-{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled .Values.staleUserSecretCleanup.enabled .Values.scaleSchedule $needScaleWatcher (and .Values.tls.enabled (eq .Values.tls.backend "job")) -}}
+{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled .Values.staleUserSecretCleanup.enabled .Values.majorUpgrade.enabled .Values.scaleSchedule $needScaleWatcher (and .Values.tls.enabled (eq .Values.tls.backend "job")) (and .Values.tls.enabled .Values.tlsCheckCronJob.enabled) -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -61,6 +61,22 @@ rules:
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [create]
+  {{- end }}
+  {{- if .Values.majorUpgrade.enabled }}
+  # `<release>-openldap-migration-state` is what the dump Job publishes and the
+  # bootstrap reads before it is allowed to rebuild the data directory. The
+  # dump Job also DELETES it when the major did not change, so a stale state
+  # can never authorise a later, unrelated upgrade - hence `delete` here, which
+  # the sync-state rule above deliberately does not grant.
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ include "openldap.fullname" . }}-migration-state]
+    verbs: [get, create, patch, delete]
+  {{- if not (or .Values.acls .Values.treeGrants .Values.overlays) }}
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  {{- end }}
   {{- end }}
   {{- if or (and .Values.tls.enabled (eq .Values.tls.backend "job") .Values.tls.job.rollingRestartOnRenew) $needScaleWatcher }}
   # TLS renew CronJob triggers `kubectl rollout restart` on the STS; the

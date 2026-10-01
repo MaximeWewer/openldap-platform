@@ -181,6 +181,79 @@ spec:
               subPath: accesslog-data
             - name: run
               mountPath: /run/openldap
+            - name: rendered
+              mountPath: /rendered
+          resources:
+            {{- toYaml $roResources | nindent 12 }}
+
+        {{- /* Same split as the writable StatefulSet: the slapadd that writes
+        the database comes from .Values.image, so it always matches the slapd
+        that will read it. A read-only pod renders an empty data file (it never
+        seeds), which slapadd treats as a no-op. */}}
+        {{- range $load := (list (dict "n" "config" "db" "0") (dict "n" "data" "db" "1")) }}
+        - name: slapadd-{{ $load.n }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: [slapadd]
+          args: ["-n", "{{ $load.db }}", "-F", "/etc/openldap/slapd.d", "-l", "/rendered/{{ $load.n }}.ldif"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER, DAC_OVERRIDE]
+          volumeMounts:
+            - name: rendered
+              mountPath: /rendered
+              readOnly: true
+            - name: data
+              mountPath: /etc/openldap/slapd.d
+              subPath: slapd.d
+            - name: data
+              mountPath: /var/lib/openldap/openldap-data
+              subPath: openldap-data
+            - name: data
+              mountPath: /var/lib/openldap/accesslog-data
+              subPath: accesslog-data
+          resources:
+            {{- toYaml $roResources | nindent 12 }}
+        {{- end }}
+
+        - name: finalize
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command: ["/bin/sh", "/bootstrap/finalize.sh"]
+          env:
+            - name: OWNER_UID
+              value: {{ .Values.securityContext.runAsUser | quote }}
+            - name: OWNER_GID
+              value: {{ .Values.securityContext.runAsGroup | quote }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER, DAC_OVERRIDE]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: rendered
+              mountPath: /rendered
+              readOnly: true
+            - name: data
+              mountPath: /etc/openldap/slapd.d
+              subPath: slapd.d
+            - name: data
+              mountPath: /var/lib/openldap/openldap-data
+              subPath: openldap-data
+            - name: data
+              mountPath: /var/lib/openldap/accesslog-data
+              subPath: accesslog-data
           resources:
             {{- toYaml $roResources | nindent 12 }}
       containers:
@@ -285,6 +358,8 @@ spec:
               readOnly: true
         {{- end }}
       volumes:
+        - name: rendered
+          emptyDir: {}
         - name: bootstrap
           configMap:
             name: {{ include "openldap.bootstrapConfigMapName" . }}

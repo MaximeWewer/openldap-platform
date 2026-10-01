@@ -42,12 +42,39 @@ data:
     SLAPD_D=/etc/openldap/slapd.d
     MDB_DIR=/var/lib/openldap/openldap-data
     ACCESSLOG_DIR=/var/lib/openldap/accesslog-data
+
+    # This container RENDERS; it does not load. back-mdb's on-disk format is
+    # tied to the OpenLDAP major, so the slapadd that writes the database has
+    # to be the one slapd will read it with - and that binary only exists in
+    # the server image. Alpine's openldap package tracks its own version (2.6
+    # as of 3.24, edge included), so loading from here would silently write a
+    # format the server may refuse.
+    #
+    # So: the LDIFs land in /rendered, and the next two init containers run
+    # `slapadd` out of .Values.image itself. An EMPTY rendered file is a clean
+    # no-op for slapadd, which is how every "nothing to seed" branch below
+    # expresses itself without needing a shell in the server image.
+    RENDER_D=/rendered
+    mkdir -p "${RENDER_D}"
+    # The finalizer runs in a separate container and has none of these values,
+    # so they travel with the rendered files.
+    write_owner() { printf '%s' "${OWNER}" > "${RENDER_D}/owner"; }
+    : > "${RENDER_D}/config.ldif"
+    : > "${RENDER_D}/data.ldif"
+    printf '%s' "0" > "${RENDER_D}/finalize"
     OWNER="${OWNER_UID:-101}:${OWNER_GID:-102}"
     OK_MARKER="${SLAPD_D}/.bootstrap-ok"
     TOPO_HASH_FILE="${SLAPD_D}/.topology-hash"
+    # Which OpenLDAP major wrote the data directory. back-mdb's on-disk format
+    # is not compatible across 2.6 -> 2.7, so this is the one thing a running
+    # pod cannot discover for itself: slapd simply refuses to open the file.
+    MAJOR_FILE="${MDB_DIR}/.openldap-major"
 
     # Alpine base image - install slapd tools (idempotent, no-op if cached).
-    if ! command -v slapadd >/dev/null 2>&1; then
+    # Only slappasswd is needed here now: its {SSHA} output is version-neutral,
+    # unlike slapadd's on-disk format. The package list still pulls the rest,
+    # which costs a few seconds and keeps the image usable for debugging.
+    if ! command -v slappasswd >/dev/null 2>&1; then
       echo "[bootstrap] Installing packages: ${APK_PACKAGES}"
       apk add --no-cache ${APK_PACKAGES} >/dev/null
     fi
@@ -117,13 +144,75 @@ data:
       CURRENT_TOPO_HASH=$(cat "${TOPO_HASH_FILE}" 2>/dev/null || echo "")
       if [ "${CURRENT_TOPO_HASH}" = "${DESIRED_TOPO_HASH}" ]; then
         echo "[bootstrap] Marker present + topology unchanged - skipping."
-        chown -R "${OWNER}" "${SLAPD_D}" "${MDB_DIR}" "${ACCESSLOG_DIR}"
+        # The rendered files stay empty, so the slapadd containers that follow
+        # are no-ops and the finalizer only re-applies ownership.
+        write_owner
         exit 0
       fi
       echo "[bootstrap] Topology changed (was=${CURRENT_TOPO_HASH:-<none>} now=${DESIRED_TOPO_HASH})"
       echo "[bootstrap] Wiping slapd.d (data preserved in ${MDB_DIR}) and re-bootstrapping."
       rm -rf "${SLAPD_D}"/* "${OK_MARKER}" "${TOPO_HASH_FILE}" 2>/dev/null || true
       RECONCILE_MODE=1
+    fi
+
+    # -------- Major OpenLDAP upgrade (2.6 -> 2.7): dump/reload ---------------
+    # The pre-upgrade Job dumped the tree while the OLD server was still up and
+    # published what it found in a ConfigMap, projected read-only at
+    # /migration-state. Nothing here is destroyed on that Job's word alone:
+    # the state has to describe THIS release and THIS suffix, and to carry a
+    # non-empty dump, or the pod is left to fail on the format mismatch with
+    # the data untouched and the LDIF still on its own volume.
+    ON_DISK_MAJOR=""
+    [ -f "${MAJOR_FILE}" ] && ON_DISK_MAJOR="$(cat "${MAJOR_FILE}" 2>/dev/null || true)"
+    MIGRATE_WIPE=0
+
+    if [ -n "${TARGET_MAJOR:-}" ] && [ -f "${OK_MARKER}" ]; then
+      # No marker means the directory predates this mechanism. Fall back to
+      # what the dump Job observed on the live server rather than assuming.
+      # A mounted ConfigMap projects one file per key, so each field is read
+      # directly rather than parsed out of a blob.
+      _ms=/migration-state
+      _from="${ON_DISK_MAJOR}"
+      [ -n "${_from}" ] || _from="$(cat ${_ms}/from_major 2>/dev/null || true)"
+
+      if [ -n "${_from}" ] && [ "${_from}" != "${TARGET_MAJOR}" ]; then
+        echo "[bootstrap] OpenLDAP major change: ${_from} -> ${TARGET_MAJOR}"
+        if [ ! -f ${_ms}/to_major ]; then
+          echo "[bootstrap] No migration state at ${_ms} - refusing to touch the data." >&2
+          echo "[bootstrap] slapd ${TARGET_MAJOR} cannot open a ${_from} back-mdb file, so this is a" >&2
+          echo "[bootstrap] dump and reload: set majorUpgrade.enabled=true and upgrade again." >&2
+          echo "[bootstrap] Rolling image.tag back to ${_from} also works, but only if that tag is" >&2
+          echo "[bootstrap] still pullable - upstream deletes them, which is why this chart mirrors." >&2
+          echo "[bootstrap] Nothing was touched; the data directory is exactly as it was." >&2
+          exit 1
+        fi
+        _st_rel="$(cat ${_ms}/release 2>/dev/null || true)"
+        _st_to="$(cat ${_ms}/to_major 2>/dev/null || true)"
+        _st_suffix="$(cat ${_ms}/suffix 2>/dev/null || true)"
+        _st_entries="$(cat ${_ms}/entries 2>/dev/null || true)"
+        if [ "${_st_rel}" = "${RELEASE_NAME:-}" ] \
+           && [ "${_st_to}" = "${TARGET_MAJOR}" ] \
+           && [ "${_st_suffix}" = "${SUFFIX:-}" ] \
+           && [ -n "${_st_entries}" ] && [ "${_st_entries}" -gt 0 ]; then
+          echo "[bootstrap] Migration state accepted (${_st_entries} entries dumped) - rebuilding empty."
+          MIGRATE_WIPE=1
+        else
+          echo "[bootstrap] Migration state does not match this release - refusing to touch the data." >&2
+          echo "[bootstrap]   state: release=${_st_rel} to=${_st_to} suffix=${_st_suffix} entries=${_st_entries}" >&2
+          echo "[bootstrap]   here : release=${RELEASE_NAME:-} to=${TARGET_MAJOR} suffix=${SUFFIX:-}" >&2
+          exit 1
+        fi
+      fi
+    fi
+
+    if [ "${MIGRATE_WIPE}" = "1" ]; then
+      # The dump is on the migration volume, which this pod never mounts, and
+      # its PVC is kept across uninstalls. The post-upgrade Job reloads from it.
+      # The markers are named explicitly: a glob does not match dotfiles, so
+      # `${MDB_DIR}/*` would leave .openldap-major claiming the old version.
+      rm -rf "${SLAPD_D}"/* "${MDB_DIR}"/* "${ACCESSLOG_DIR}"/* \
+             "${OK_MARKER}" "${TOPO_HASH_FILE}" "${MAJOR_FILE}" 2>/dev/null || true
+      RECONCILE_MODE=0
     fi
 
     if [ -d "${SLAPD_D}" ] && [ -n "$(ls -A ${SLAPD_D} 2>/dev/null)" ]; then
@@ -351,9 +440,12 @@ data:
     mkdir -p "${SLAPD_D}" "${MDB_DIR}" "${ACCESSLOG_DIR}"
 
     # Render cn=config with password hashes and HA markers.
-    RENDERED_CONFIG=$(mktemp)
-    RENDERED_DATA=$(mktemp)
-    trap 'rm -f "${RENDERED_CONFIG}" "${RENDERED_DATA}" "${SYNCREPL_FILE:-}" "${SERVER_ID_FILE:-}" "${CONFIG_SYNCREPL_FILE:-}" "${CONFIG_SYNCPROV_FILE:-}"' EXIT
+    RENDERED_CONFIG="${RENDER_D}/config.ldif"
+    RENDERED_DATA="${RENDER_D}/data.ldif"
+    # The rendered LDIFs are deliberately NOT in this trap: they used to be
+    # mktemp scratch consumed by a slapadd in this same container, and are now
+    # the hand-off to the loader containers that run next.
+    trap 'rm -f "${SYNCREPL_FILE:-}" "${SERVER_ID_FILE:-}" "${CONFIG_SYNCREPL_FILE:-}" "${CONFIG_SYNCPROV_FILE:-}"' EXIT
 
     # Build a sed script file - safer than shell word-splitting when
     # substitution values contain spaces (e.g. "olcMirrorMode: TRUE").
@@ -411,8 +503,7 @@ data:
       fi
     fi
 
-    echo "[bootstrap] Loading cn=config"
-    slapadd -n 0 -F "${SLAPD_D}" -l "${RENDERED_CONFIG}"
+    echo "[bootstrap] cn=config rendered ($(grep -c '^dn:' "${RENDERED_CONFIG}" || echo 0) entries) - the slapadd-config init container loads it"
 
     # Base data: standalone always, HA only on ordinal 0 (default) so peers
     # sync from ordinal 0 instead of concurrently seeding split-brain state.
@@ -438,38 +529,90 @@ data:
       # template).
       sed -e "s|__REPLICATOR_PW_HASH__|${REPLICATOR_HASH}|" \
           /bootstrap/base-data.ldif > "${RENDERED_DATA}"
-      echo "[bootstrap] Loading base directory data"
-      slapadd -n 1 -F "${SLAPD_D}" -l "${RENDERED_DATA}"
 
-      # Custom data LDIFs - same seed pod, alphabetical order, one slapadd
-      # per file so a bad LDIF only wastes its own file rather than the
-      # whole batch. Files come from /custom-ldifs (projected volume).
+      # Custom data LDIFs, alphabetical, appended to the same file. They used
+      # to get one slapadd each so a bad file only wasted itself; the load now
+      # happens in another container, which has no shell to loop in, so they
+      # share one batch and one bad file fails the lot. The blank line between
+      # records is what keeps them separate entries.
       if [ -d /custom-ldifs ]; then
         for f in $(ls /custom-ldifs/*.ldif 2>/dev/null | sort); do
-          echo "[bootstrap] Loading custom LDIF $(basename "$f")"
-          slapadd -n 1 -F "${SLAPD_D}" -l "$f"
+          echo "[bootstrap] Appending custom LDIF $(basename "$f")"
+          printf '\n\n' >> "${RENDERED_DATA}"
+          cat "$f" >> "${RENDERED_DATA}"
         done
       fi
+      echo "[bootstrap] base data rendered ($(grep -c '^dn:' "${RENDERED_DATA}" || echo 0) entries) - the slapadd-data init container loads it"
     else
       echo "[bootstrap] ordinal=${ORDINAL} - skipping base data seed (will sync from ordinal 0)"
+      : > "${RENDERED_DATA}"
     fi
 
-    echo "[bootstrap] chown -R ${OWNER}"
+    # Hand the finalizer everything it needs. The markers are deliberately NOT
+    # written here: they must land AFTER slapadd, or a slapadd that fails
+    # would leave a directory flagged as successfully bootstrapped.
+    write_owner
+    printf '%s' "${DESIRED_TOPO_HASH}" > "${RENDER_D}/topo-hash"
+    [ -n "${TARGET_MAJOR:-}" ] && printf '%s' "${TARGET_MAJOR}" > "${RENDER_D}/major"
+    printf '%s' "${RECONCILE_MODE:-0}" > "${RENDER_D}/reconcile"
+    printf '%s' "1" > "${RENDER_D}/finalize"
+    echo "[bootstrap] Render done."
+
+  # ---------------------------------------------------------------------------
+  # finalize.sh - last init container, after the two slapadd ones.
+  #
+  # Ownership and the success markers both belong here rather than in the
+  # renderer: written earlier they would claim a directory that slapadd had
+  # not filled yet, and a slapadd that failed would leave it flagged as
+  # successfully bootstrapped - skipped on every later boot.
+  # ---------------------------------------------------------------------------
+  finalize.sh: |
+    #!/bin/sh
+    set -eu
+
+    SLAPD_D=/etc/openldap/slapd.d
+    MDB_DIR=/var/lib/openldap/openldap-data
+    ACCESSLOG_DIR=/var/lib/openldap/accesslog-data
+    RENDER_D=/rendered
+    OK_MARKER="${SLAPD_D}/.bootstrap-ok"
+    TOPO_HASH_FILE="${SLAPD_D}/.topology-hash"
+    MAJOR_FILE="${MDB_DIR}/.openldap-major"
+
+    OWNER="$(cat "${RENDER_D}/owner" 2>/dev/null || true)"
+    OWNER="${OWNER:-${OWNER_UID:-101}:${OWNER_GID:-102}}"
+
+    echo "[finalize] chown -R ${OWNER}"
     chown -R "${OWNER}" "${SLAPD_D}" "${MDB_DIR}" "${ACCESSLOG_DIR}"
 
-    # Topology hash - written BEFORE the OK marker so a mid-write crash
-    # forces a re-reconcile on next boot rather than a stale-hash accept.
-    printf '%s\n' "${DESIRED_TOPO_HASH}" > "${TOPO_HASH_FILE}"
+    # The renderer took the skip path: nothing was loaded, so nothing is
+    # restamped. Ownership above is re-applied either way, as it always was.
+    if [ "$(cat "${RENDER_D}/finalize" 2>/dev/null || echo 0)" != "1" ]; then
+      echo "[finalize] nothing was rendered - ownership only."
+      exit 0
+    fi
+
+    # Topology hash BEFORE the OK marker, so a crash between the two forces a
+    # re-reconcile on the next boot rather than accepting a stale hash.
+    cat "${RENDER_D}/topo-hash" > "${TOPO_HASH_FILE}"
+    printf '\n' >> "${TOPO_HASH_FILE}"
     chown "${OWNER}" "${TOPO_HASH_FILE}"
 
-    # Success marker - written LAST so a partial bootstrap forces a redo.
+    # Which major wrote this data directory, so the next upgrade can tell
+    # whether the on-disk format still matches the image it is about to run.
+    if [ -f "${RENDER_D}/major" ]; then
+      cat "${RENDER_D}/major" > "${MAJOR_FILE}"
+      printf '\n' >> "${MAJOR_FILE}"
+      chown "${OWNER}" "${MAJOR_FILE}"
+    fi
+
+    # Success marker LAST - a partial bootstrap must force a redo.
     date -u +%Y-%m-%dT%H:%M:%SZ > "${OK_MARKER}"
     chown "${OWNER}" "${OK_MARKER}"
 
-    if [ "${RECONCILE_MODE:-0}" = "1" ]; then
-      echo "[bootstrap] Reconcile done - cn=config rebuilt for the new topology."
+    if [ "$(cat "${RENDER_D}/reconcile" 2>/dev/null || echo 0)" = "1" ]; then
+      echo "[finalize] Reconcile done - cn=config rebuilt for the new topology."
     fi
-    echo "[bootstrap] Done."
+    echo "[finalize] Done."
 
   slapd-config.ldif: |
     dn: cn=config

@@ -1,0 +1,129 @@
+{{- if .Values.majorUpgrade.enabled -}}
+{{- $fullName := include "openldap.fullname" . -}}
+{{- $major := regexFind "^[0-9]+\\.[0-9]+" (.Values.image.tag | toString) -}}
+{{- if not $major }}
+{{- fail (printf "majorUpgrade.enabled requires image.tag to start with <major>.<minor>, got %q - pin a version tag or disable majorUpgrade" .Values.image.tag) }}
+{{- end }}
+{{- $claim := default (printf "%s-migration" $fullName) .Values.majorUpgrade.persistence.existingClaim -}}
+{{- /*
+Two halves of the same operation, so they share this file.
+
+  dump    pre-upgrade,  weight -25: runs while the OLD server still serves.
+                        Its failure fails the upgrade, before anything is
+                        rebuilt.
+  restore post-upgrade, weight 2:   after the bootstrap rebuilt the tree
+                        empty, and BEFORE the sync Jobs (ppolicy 5, users 10,
+                        groups 15) so they reconcile on top of restored data.
+
+Neither is deleted on success - `kubectl logs` on them is the record of what
+was migrated.
+*/ -}}
+{{- range $phase := (list "dump" "restore") }}
+{{- $isDump := eq $phase "dump" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullName }}-migrate-{{ $phase }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "openldap.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: migration
+    openldap.platform/migration-phase: {{ $phase }}
+  annotations:
+    helm.sh/hook: {{ if $isDump }}pre-upgrade{{ else }}post-upgrade{{ end }}
+    helm.sh/hook-weight: "{{ if $isDump }}-25{{ else }}2{{ end }}"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        {{- include "openldap.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: migration
+        openldap.platform/migration-phase: {{ $phase }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $fullName }}-sync
+      securityContext:
+        runAsNonRoot: false
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate-{{ $phase }}
+          image: "{{ $.Values.cli.image.repository }}:{{ $.Values.cli.image.tag }}"
+          imagePullPolicy: {{ $.Values.cli.image.pullPolicy }}
+          command: ["/bin/sh", "-eu", "/scripts/migrate-{{ $phase }}.sh"]
+          env:
+            - name: RELEASE_NAME
+              value: {{ $.Release.Name | quote }}
+            - name: RELEASE_FULLNAME
+              value: {{ $fullName | quote }}
+            - name: RELEASE_NAMESPACE
+              value: {{ $.Release.Namespace | quote }}
+            - name: LDAP_URL
+              value: "ldap://{{ $fullName }}.{{ $.Release.Namespace }}.svc.cluster.local:{{ $.Values.service.ldapPort }}"
+            - name: LDAP_BASE_DN
+              value: {{ $.Values.directory.suffix | quote }}
+            - name: LDAP_BIND_DN
+              value: {{ $.Values.admin.bindDN | quote }}
+            - name: LDAP_USER_OU
+              value: "ou=users"
+            - name: LDAP_GROUP_OU
+              value: "ou=groups"
+            - name: LDAP_POLICY_OU
+              value: "ou=policies"
+            - name: LDAP_MAIL_DOMAIN
+              value: {{ include "openldap.mailDomain" $ | quote }}
+            - name: CLI_VERSION
+              value: {{ $.Values.cli.version | quote }}
+            - name: CLI_DOWNLOAD_URL
+              value: {{ $.Values.cli.downloadUrl | quote }}
+            - name: KUBECTL_VERSION
+              value: {{ $.Values.cli.kubectlVersion | quote }}
+            - name: CLI_SHA256
+              value: {{ $.Values.cli.sha256 | quote }}
+            - name: KUBECTL_SHA256
+              value: {{ $.Values.cli.kubectlSha256 | quote }}
+            - name: PASSWORD_FILES
+              value: {{ $.Values.cli.passwordFiles | quote }}
+            - name: WAIT_TIMEOUT_SECONDS
+              value: {{ $.Values.cli.waitForLdap.timeoutSeconds | quote }}
+            - name: WAIT_INTERVAL_SECONDS
+              value: {{ $.Values.cli.waitForLdap.intervalSeconds | quote }}
+            - name: TARGET_MAJOR
+              value: {{ $major | quote }}
+            - name: MIGRATION_DIR
+              value: "/migration"
+            {{- if not $isDump }}
+            - name: MAX_DUMP_AGE_MINUTES
+              value: {{ $.Values.majorUpgrade.maxDumpAgeMinutes | quote }}
+            - name: ROLLOUT_TIMEOUT_SECONDS
+              value: {{ $.Values.majorUpgrade.rolloutTimeoutSeconds | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml $.Values.majorUpgrade.resources | nindent 12 }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: admin-secret
+              mountPath: /secrets
+              readOnly: true
+            - name: migration
+              mountPath: /migration
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ $fullName }}-sync-scripts
+            defaultMode: 0555
+        - name: admin-secret
+          secret:
+            secretName: {{ include "openldap.adminSecretName" $ }}
+            defaultMode: 0400
+        - name: migration
+          persistentVolumeClaim:
+            claimName: {{ $claim }}
+{{- end }}
+{{- end }}

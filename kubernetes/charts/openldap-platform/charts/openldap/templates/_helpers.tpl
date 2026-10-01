@@ -242,3 +242,31 @@ into `corp.example.com`. Users can override by setting
 {{- join "." $parts -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+The `ldap` account baked into cleanstart/openldap moved between majors:
+2.6.x ships 101:102, 2.7.x ships 102:103, and /var/lib/openldap is 0700 for
+it. slapd runs under securityContext.runAsUser, so a mismatch means it cannot
+traverse into its own data volume and dies with
+
+  olcDbDirectory: value #0: invalid path: Permission denied
+
+which reads like a storage fault rather than a uid one. Caught here instead,
+and only for the exact broken combination - a custom image or a deliberate
+uid is none of this template's business.
+*/}}
+{{- define "openldap.validateRuntimeUid" -}}
+{{- $known := list "cleanstart/openldap" "ghcr.io/maximewewer/openldap" -}}
+{{- if has .Values.image.repository $known -}}
+{{- $major := regexFind "^[0-9]+\\.[0-9]+" (.Values.image.tag | toString) -}}
+{{- $want := dict "2.6" (dict "uid" 101.0 "gid" 102.0) "2.7" (dict "uid" 102.0 "gid" 103.0) -}}
+{{- $exp := index $want $major -}}
+{{- if $exp -}}
+{{- $uid := .Values.securityContext.runAsUser | float64 -}}
+{{- $gid := .Values.securityContext.runAsGroup | float64 -}}
+{{- if or (ne $uid $exp.uid) (ne $gid $exp.gid) -}}
+{{- fail (printf "image %s:%s runs its ldap account as %v:%v, but securityContext.runAsUser/runAsGroup are %v:%v - /var/lib/openldap is 0700 for that account, so slapd would fail with 'olcDbDirectory: invalid path: Permission denied'. Set securityContext.runAsUser=%v, runAsGroup=%v and podSecurityContext.fsGroup=%v." .Values.image.repository .Values.image.tag $exp.uid $exp.gid $uid $gid $exp.uid $exp.gid $exp.gid) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

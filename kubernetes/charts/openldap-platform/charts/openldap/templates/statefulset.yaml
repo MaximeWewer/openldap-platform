@@ -99,6 +99,7 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- include "openldap.validateRuntimeUid" . }}
       initContainers:
         {{- with .Values.extraInitContainers }}
         {{- toYaml . | nindent 8 }}
@@ -114,6 +115,19 @@ spec:
               value: {{ .Values.securityContext.runAsUser | quote }}
             - name: OWNER_GID
               value: {{ .Values.securityContext.runAsGroup | quote }}
+            - name: RELEASE_NAME
+              value: {{ .Release.Name | quote }}
+            {{- if .Values.majorUpgrade.enabled }}
+            {{- $major := regexFind "^[0-9]+\\.[0-9]+" (.Values.image.tag | toString) }}
+            {{- if not $major }}
+            {{- fail (printf "majorUpgrade.enabled requires image.tag to start with <major>.<minor>, got %q" .Values.image.tag) }}
+            {{- end }}
+            # Which OpenLDAP major this pod is about to run. The bootstrap
+            # compares it with the one stamped on the data directory to notice
+            # a back-mdb format change before slapd trips over it.
+            - name: TARGET_MAJOR
+              value: {{ $major | quote }}
+            {{- end }}
             - name: MODE
               value: {{ $mode | quote }}
             - name: POD_NAME
@@ -212,6 +226,97 @@ spec:
               subPath: accesslog-data
             - name: run
               mountPath: /run/openldap
+            - name: rendered
+              mountPath: /rendered
+            {{- if .Values.majorUpgrade.enabled }}
+            - name: migration-state
+              mountPath: /migration-state
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+        {{- /*
+        The two loaders. They run `slapadd` out of .Values.image, so the
+        binary that writes the database is by construction the one slapd will
+        read it with - back-mdb's on-disk format is tied to the OpenLDAP
+        major, and no base image packages the matching tooling (Alpine and
+        Debian sid both sit on 2.6). An empty rendered file is a clean no-op,
+        which is how the renderer expresses "nothing to seed" to a container
+        that has no shell to branch in.
+        */}}
+        {{- range $load := (list (dict "n" "config" "db" "0") (dict "n" "data" "db" "1")) }}
+        - name: slapadd-{{ $load.n }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: [slapadd]
+          args:
+            - "-n"
+            - "{{ $load.db }}"
+            - "-F"
+            - "/etc/openldap/slapd.d"
+            - "-l"
+            - "/rendered/{{ $load.n }}.ldif"
+          securityContext:
+            # Writes into a volume the renderer has not chowned yet; the
+            # finalizer sets ownership once both loads are through.
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER, DAC_OVERRIDE]
+          volumeMounts:
+            - name: rendered
+              mountPath: /rendered
+              readOnly: true
+            - name: data
+              mountPath: /etc/openldap/slapd.d
+              subPath: slapd.d
+            - name: data
+              mountPath: /var/lib/openldap/openldap-data
+              subPath: openldap-data
+            - name: data
+              mountPath: /var/lib/openldap/accesslog-data
+              subPath: accesslog-data
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+
+        - name: finalize
+          image: "{{ .Values.initImage.repository }}:{{ .Values.initImage.tag }}"
+          imagePullPolicy: {{ .Values.initImage.pullPolicy }}
+          command: ["/bin/sh", "/bootstrap/finalize.sh"]
+          env:
+            - name: OWNER_UID
+              value: {{ .Values.securityContext.runAsUser | quote }}
+            - name: OWNER_GID
+              value: {{ .Values.securityContext.runAsGroup | quote }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER, DAC_OVERRIDE]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: rendered
+              mountPath: /rendered
+              readOnly: true
+            - name: data
+              mountPath: /etc/openldap/slapd.d
+              subPath: slapd.d
+            - name: data
+              mountPath: /var/lib/openldap/openldap-data
+              subPath: openldap-data
+            - name: data
+              mountPath: /var/lib/openldap/accesslog-data
+              subPath: accesslog-data
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       containers:
@@ -368,6 +473,19 @@ spec:
           configMap:
             name: {{ include "openldap.bootstrapConfigMapName" . }}
             defaultMode: 0555
+        # Hand-off between the renderer, the two slapadd containers and the
+        # finalizer. Lives and dies with the pod.
+        - name: rendered
+          emptyDir: {}
+        {{- if .Values.majorUpgrade.enabled }}
+        # Written by the pre-upgrade dump Job. `optional` because it does not
+        # exist until a major upgrade actually happens - without it every
+        # ordinary install would fail to schedule.
+        - name: migration-state
+          configMap:
+            name: {{ include "openldap.fullname" . }}-migration-state
+            optional: true
+        {{- end }}
         - name: admin-secret
           secret:
             secretName: {{ include "openldap.adminSecretName" . }}
