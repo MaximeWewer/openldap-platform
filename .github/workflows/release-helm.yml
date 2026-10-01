@@ -330,10 +330,21 @@ jobs:
       - name: Tag the commit the release was built from
         run: |
           set -euo pipefail
-          # The `contents: write` permission above was granted for this and
-          # nothing was ever creating it, which is also why the old
-          # "tag already exists" guard could never fire. An OCI tag says what
-          # is published; this says which commit produced it.
-          git tag -a "${{ steps.chart.outputs.tag }}" \
-            -m "openldap-platform ${{ steps.chart.outputs.version }}"
-          git push origin "${{ steps.chart.outputs.tag }}"
+          TAG='${{ steps.chart.outputs.tag }}'
+          # An annotated tag records a tagger, and a runner has no git identity
+          # of its own - without this the step dies on
+          # "empty ident name ... not allowed". The CLI repository sidesteps it
+          # by letting action-gh-release create the tag through the API; here
+          # the tag is made locally, so the identity has to be set.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Idempotent: the chart is pushed first, so a re-run after a failure
+          # here must be able to finish the job rather than trip over its own
+          # half-done state.
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "${TAG} already exists on the remote - nothing to do"
+            exit 0
+          fi
+          git tag -a "${TAG}" -m "openldap-platform ${{ steps.chart.outputs.version }}"
+          git push origin "${TAG}"
