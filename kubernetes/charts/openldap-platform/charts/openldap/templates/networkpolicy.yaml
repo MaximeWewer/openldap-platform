@@ -48,14 +48,19 @@ spec:
         {{- end }}
     {{- end }}
 
-    # 2) Sync / backup / purge / tls-renew Jobs - identified by the
-    #    chart's SA-derived component label.
+    # 2) Every Job and CronJob the chart runs against the directory,
+    #    identified by its component label. The list has to name each one:
+    #    the policy is default-deny, so a component missing here is a
+    #    component whose pods cannot reach slapd at all - and the failure is
+    #    a connection timeout, which reads like the server being down rather
+    #    than like a policy. `acl-lint`, `tls-check` and `migration` were
+    #    each added after being written; keep this in step when adding more.
     - from:
         - podSelector:
             matchExpressions:
               - key: app.kubernetes.io/component
                 operator: In
-                values: [sync, backup, accesslog-purge, tls]
+                values: [sync, backup, accesslog-purge, tls, acl-lint, tls-check, migration]
       ports:
         - protocol: TCP
           port: {{ $ldapPort }}
