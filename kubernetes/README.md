@@ -53,6 +53,7 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
 - **Three TLS backends**: `cert-manager` Certificate CR, in-cluster `job` (self-signed CA + weekly renew CronJob + rolling restart), or user-`provided` Secret.
 - **Ingress**: `ingress-nginx` SSL passthrough OR Gateway API `TLSRoute` - both for LDAPS.
 - **Backup + accesslog purge**: daily `openldap-cli backup` + weekly `openldap-cli ops accesslog-purge` CronJobs.
+- **TLS audit**: optional daily `openldap-cli tls check` CronJob - expiry, obsolete protocols and revocation probed on the wire, for all three TLS backends.
 - **Prometheus monitoring**: sidecar [openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter) + `ServiceMonitor` + baseline `PrometheusRule`.
 - **Hardened by default**: non-root, drop-all caps, read-only rootfs, seccomp `RuntimeDefault`, auto-PDB in HA, NetworkPolicy scoped to server pods.
 - **Extension points**: `extraEnv`, `extraVolumes`/`Mounts`, `sidecars`, `extraInitContainers`, `extraDeploy` on every subchart.
@@ -385,7 +386,25 @@ openldap:
 
 **Syncrepl over TLS** - `replication.startTLS: "yes|critical"` + `replication.tlsReqcert: never|allow|try|demand` control the handshake on each `olcSyncRepl` entry. Quote `"yes"` - YAML 1.1 parses bare `yes` as boolean.
 
-**TLS floor** - `tls.protocolMin` (default `"3.3"`, TLS 1.2) writes `olcTLSProtocolMin`. Left unset the floor is whatever the image's libssl ships, which moves with the image. Like `minSSF` and `disallowPlainBind` it is written by the bootstrap init container, which only rebuilds `cn=config` on a first install or a topology change - changing it on a running release needs an `ldapmodify` on `cn=config`, see the note in `values.yaml`.
+### TLS audit (all three backends)
+
+`tls.protocolMin` (default `"3.3"`, TLS 1.2) writes `olcTLSProtocolMin`. Left unset the floor is whatever the image's libssl ships, which moves with the image. Like `minSSF` and `disallowPlainBind` it is written by the bootstrap init container, which only rebuilds `cn=config` on a first install or a topology change - changing it on a running release needs an `ldapmodify` on `cn=config`, see the note in `values.yaml`.
+
+`tlsCheckCronJob.enabled: true` schedules `openldap-cli tls check` (CLI >= v2026.10.1) against the release's LDAPS endpoint - LDAPS when `service.enableLdapsPort`, StartTLS on 389 otherwise. It probes what the server really presents and accepts on the wire rather than what `cn=config` claims, and it is the only expiry watch that covers `cert-manager` and `provided`: the renew CronJob above exists only for `backend: job`.
+
+```yaml
+openldap:
+  tlsCheckCronJob:
+    enabled: true
+    schedule: "15 4 * * *"
+    days: 30                        # expiry window, chain + client certificate
+    failOn:
+      expiry: true
+      obsoleteProtocols: true       # server still completes a TLS 1.0 / 1.1 handshake
+      chainNotSelfValidating: false # normal for a private CA - see below
+```
+
+Everything found is logged; `failOn` only decides the exit code, which is what Kubernetes and your alerting see. `chainNotSelfValidating` is off by default because the probe trusts **only what is on the wire** and deliberately ignores any local trust store: a private CA - what `backend: job` builds, and what a cert-manager CA issuer produces - serves the leaf alone and keeps `ca.crt` for out-of-band distribution, so that finding would be permanent. Turn it on for a public issuer expected to serve a complete chain. Anything outside those three classes (a revoked OCSP staple, an unreadable stapled response) always fails the Job.
 
 ### Ingress (LDAPS only)
 

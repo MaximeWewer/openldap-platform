@@ -1,0 +1,114 @@
+{{- if and .Values.tls.enabled .Values.tlsCheckCronJob.enabled -}}
+{{- $fullName := include "openldap.fullname" . -}}
+{{- /*
+Prefer the dedicated LDAPS port. With it disabled on the Service the probe
+falls back to StartTLS on the plaintext port - same handshake, same verdict,
+and the pod binds both regardless of which ports the Service publishes.
+*/ -}}
+{{- $useLdaps := .Values.service.enableLdapsPort -}}
+{{- $url := printf "ldaps://%s.%s.svc.cluster.local:%v" $fullName .Release.Namespace .Values.service.ldapsPort -}}
+{{- if not $useLdaps }}
+{{- $url = printf "ldap://%s.%s.svc.cluster.local:%v" $fullName .Release.Namespace .Values.service.ldapPort -}}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-tls-check
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openldap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tls-check
+spec:
+  schedule: {{ .Values.tlsCheckCronJob.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "openldap.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: tls-check
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ $fullName }}-sync
+          securityContext:
+            runAsNonRoot: false
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: tls-check
+              image: "{{ .Values.cli.image.repository }}:{{ .Values.cli.image.tag }}"
+              imagePullPolicy: {{ .Values.cli.image.pullPolicy }}
+              command: ["/bin/sh", "-eu", "/scripts/tls-check.sh"]
+              env:
+                - name: RELEASE_NAME
+                  value: {{ .Release.Name | quote }}
+                - name: RELEASE_FULLNAME
+                  value: {{ $fullName | quote }}
+                - name: RELEASE_NAMESPACE
+                  value: {{ .Release.Namespace | quote }}
+                - name: LDAP_URL
+                  value: {{ $url | quote }}
+                {{- if not $useLdaps }}
+                - name: LDAP_START_TLS
+                  value: "true"
+                {{- end }}
+                - name: LDAP_BASE_DN
+                  value: {{ .Values.directory.suffix | quote }}
+                - name: LDAP_BIND_DN
+                  value: {{ .Values.admin.bindDN | quote }}
+                - name: LDAP_USER_OU
+                  value: "ou=users"
+                - name: LDAP_GROUP_OU
+                  value: "ou=groups"
+                - name: LDAP_POLICY_OU
+                  value: "ou=policies"
+                - name: LDAP_MAIL_DOMAIN
+                  value: {{ include "openldap.mailDomain" . | quote }}
+                - name: CLI_VERSION
+                  value: {{ .Values.cli.version | quote }}
+                - name: CLI_DOWNLOAD_URL
+                  value: {{ .Values.cli.downloadUrl | quote }}
+                - name: KUBECTL_VERSION
+                  value: {{ .Values.cli.kubectlVersion | quote }}
+                - name: CLI_SHA256
+                  value: {{ .Values.cli.sha256 | quote }}
+                - name: KUBECTL_SHA256
+                  value: {{ .Values.cli.kubectlSha256 | quote }}
+                - name: PASSWORD_FILES
+                  value: {{ .Values.cli.passwordFiles | quote }}
+                - name: WAIT_TIMEOUT_SECONDS
+                  value: {{ .Values.cli.waitForLdap.timeoutSeconds | quote }}
+                - name: WAIT_INTERVAL_SECONDS
+                  value: {{ .Values.cli.waitForLdap.intervalSeconds | quote }}
+                - name: CHECK_DAYS
+                  value: {{ .Values.tlsCheckCronJob.days | quote }}
+                - name: FAIL_EXPIRY
+                  value: {{ .Values.tlsCheckCronJob.failOn.expiry | quote }}
+                - name: FAIL_PROTOCOLS
+                  value: {{ .Values.tlsCheckCronJob.failOn.obsoleteProtocols | quote }}
+                - name: FAIL_CHAIN
+                  value: {{ .Values.tlsCheckCronJob.failOn.chainNotSelfValidating | quote }}
+              resources:
+                {{- toYaml .Values.tlsCheckCronJob.resources | nindent 16 }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: admin-secret
+                  mountPath: /secrets
+                  readOnly: true
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ $fullName }}-sync-scripts
+                defaultMode: 0555
+            - name: admin-secret
+              secret:
+                secretName: {{ include "openldap.adminSecretName" . }}
+                defaultMode: 0400
+{{- end }}

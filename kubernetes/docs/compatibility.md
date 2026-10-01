@@ -81,6 +81,12 @@ password reaches a Job's environment or command line. Those three landed in
 set `passwordFiles: false` as well, or the older binary ignores the `*_FILE`
 variables and binds with an empty password.
 
+`openldap.tlsCheckCronJob` calls `tls check`, which landed in **v2026.10.1**.
+Pinning the CLI below that and enabling the CronJob fails the Job on an unknown
+subcommand. `onOuChange: move` needs **v2026.7.4** (`user move`,
+`entry rename --newsuperior`), and the declarative `acls` / `treeGrants` /
+`overlays` blocks need **v2026.7.4** as well.
+
 ## Prometheus exporter
 
 - Image: `ghcr.io/maximewewer/openldap_prometheus_exporter:2026.9.1`

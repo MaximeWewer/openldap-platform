@@ -5,7 +5,7 @@ download openldap-cli + kubectl, then run one of the scripts below.
 
 Each script is idempotent - safe to re-run on every `helm upgrade`.
 */ -}}
-{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled .Values.staleUserSecretCleanup.enabled -}}
+{{- if or .Values.users .Values.groups .Values.policies .Values.acls .Values.treeGrants .Values.overlays .Values.backup.enabled .Values.accesslogPurgeJob.enabled .Values.aclLintCronJob.enabled .Values.staleUserSecretCleanup.enabled (and .Values.tls.enabled .Values.tlsCheckCronJob.enabled) -}}
 {{- $suffix := .Values.directory.suffix -}}
 {{- $userOU := "ou=users" -}}
 {{- $groupOU := "ou=groups" -}}
@@ -1087,6 +1087,105 @@ data:
     done
 
     LOG "stale user Secret scan done"
+
+  # ---------------------------------------------------------------------------
+  # tls-check.sh - probe the LDAPS endpoint the way a client does.
+  #
+  # `tls check` exits non-zero on ANY finding, and some of them are normal for
+  # a private CA. The exit code is what Kubernetes alerts on, so the findings
+  # are re-classified here and `tlsCheckCronJob.failOn` decides which ones are
+  # allowed to fail the Job. Everything is logged either way.
+  # ---------------------------------------------------------------------------
+  tls-check.sh: |
+    #!/bin/sh
+    set -eu
+    . /scripts/common.sh
+
+    : "${CHECK_DAYS:?}"
+
+    # Not wait_for_ldap: that binds, and a bind needs the CA in the container's
+    # trust store while this probe deliberately needs nothing. `tls show` is a
+    # handshake and nothing more - the exact readiness signal for this Job.
+    wait_for_tls() {
+      end=$(( $(date +%s) + ${WAIT_TIMEOUT_SECONDS:-180} ))
+      while [ "$(date +%s)" -lt "$end" ]; do
+        if openldap-cli tls show >/dev/null 2>&1; then
+          LOG "TLS endpoint reachable at ${LDAP_URL}"
+          return 0
+        fi
+        sleep "${WAIT_INTERVAL_SECONDS:-3}"
+      done
+      DIE "no TLS handshake with ${LDAP_URL} within ${WAIT_TIMEOUT_SECONDS:-180}s"
+    }
+    wait_for_tls
+
+    # Non-zero here means "found something", which is the normal case - so the
+    # exit code is deliberately ignored and the JSON is what gets read. A run
+    # that produced no JSON at all is a different failure and stops the Job.
+    OUT=$(openldap-cli tls check --days "${CHECK_DAYS}" -o json 2>/tmp/tls-check.err || true)
+    if ! printf '%s' "$OUT" | jq -e . >/dev/null 2>&1; then
+      LOG "tls check produced no result:"
+      cat /tmp/tls-check.err >&2 || true
+      DIE "tls check failed to probe ${LDAP_URL}"
+    fi
+
+    LOG "chain on ${LDAP_URL}:"
+    printf '%s' "$OUT" | jq -r '.chain[]
+      | "  \(.role): \(.subject) - \(.days_left) day(s) left, until \(.not_after)"'
+    LOG "protocols accepted: $(printf '%s' "$OUT" | jq -r '.protocols_accepted | join(", ")')"
+    printf '%s' "$OUT" | jq -r '.notes[]? | "[sync]   ~ " + .'
+
+    # Expiry and obsolete protocols come from the structured fields rather than
+    # from the `problems` strings - the strings are prose and would be matched
+    # by accident.
+    EXPIRY=$(printf '%s' "$OUT" | jq -r --argjson d "${CHECK_DAYS}" '
+      .chain[] | select(.expired or .days_left < $d)
+      | "\(.role) (\(.subject)) " +
+        (if .expired then "EXPIRED on \(.not_after)"
+                     else "expires in \(.days_left) day(s), on \(.not_after)" end)')
+
+    OBSOLETE=$(printf '%s' "$OUT" | jq -r '
+      .protocols_accepted[] | select(. == "TLS 1.0" or . == "TLS 1.1")')
+
+    # Whatever is left once those two are accounted for: the chain findings,
+    # and anything the probe may report that this script does not know about.
+    REMAINDER=$(printf '%s' "$OUT" | jq -r '
+      .problems[]?
+      | select(test("EXPIRED on|expires in") | not)
+      | select(test("deprecated by RFC 8996") | not)')
+    CHAIN=$(printf '%s\n' "$REMAINDER" \
+      | grep -E "does not carry its root|does not validate" || true)
+    OTHER=$(printf '%s\n' "$REMAINDER" \
+      | grep -vE "does not carry its root|does not validate" || true)
+
+    FAILED=0
+
+    # $1 = findings, $2 = whether they fail the Job, $3 = label
+    report() {
+      [ -n "$(printf '%s' "$1" | tr -d '[:space:]')" ] || return 0
+      if [ "$2" = "true" ]; then
+        FAILED=1
+        printf '%s\n' "$1" | while read -r f; do
+          [ -n "$f" ] && LOG "  ! ${3}: ${f}"
+        done
+      else
+        printf '%s\n' "$1" | while read -r f; do
+          [ -n "$f" ] && LOG "  ~ ${3} (not failing, failOn disabled): ${f}"
+        done
+      fi
+    }
+
+    report "$EXPIRY"   "${FAIL_EXPIRY:-true}"    "expiry"
+    report "$OBSOLETE" "${FAIL_PROTOCOLS:-true}" "server still accepts"
+    report "$CHAIN"    "${FAIL_CHAIN:-false}"    "chain"
+    # Never optional: a revoked staple or an unreadable OCSP response is not a
+    # property of how the certificate was issued, it is a live problem.
+    report "$OTHER"    "true"                    "finding"
+
+    if [ "$FAILED" -eq 1 ]; then
+      DIE "TLS audit found problems on ${LDAP_URL} - see above"
+    fi
+    LOG "TLS audit clean"
 
   acl-lint.sh: |
     #!/bin/sh

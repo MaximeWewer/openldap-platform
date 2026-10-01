@@ -317,6 +317,16 @@ Kubernetes: `>=1.27.0-0`
 | tls.minSSF | int | `0` |  |
 | tls.protocolMin | string | `"3.3"` |  |
 | tls.provided.secretName | string | `""` |  |
+| tlsCheckCronJob.days | int | `30` |  |
+| tlsCheckCronJob.enabled | bool | `false` |  |
+| tlsCheckCronJob.failOn.chainNotSelfValidating | bool | `false` |  |
+| tlsCheckCronJob.failOn.expiry | bool | `true` |  |
+| tlsCheckCronJob.failOn.obsoleteProtocols | bool | `true` |  |
+| tlsCheckCronJob.resources.limits.cpu | string | `"500m"` |  |
+| tlsCheckCronJob.resources.limits.memory | string | `"256Mi"` |  |
+| tlsCheckCronJob.resources.requests.cpu | string | `"50m"` |  |
+| tlsCheckCronJob.resources.requests.memory | string | `"64Mi"` |  |
+| tlsCheckCronJob.schedule | string | `"15 4 * * *"` |  |
 | tolerations | list | `[]` |  |
 | topologySpreadConstraints | list | `[]` |  |
 | treeGrants | list | `[]` |  |

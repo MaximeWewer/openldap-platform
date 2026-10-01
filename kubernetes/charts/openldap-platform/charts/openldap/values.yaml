@@ -942,6 +942,51 @@ aclLintCronJob:
     limits:   { cpu: 500m, memory: 256Mi }
 
 # =============================================================================
+# TLS audit - openldap-cli tls check (CLI >= v2026.10.1)
+# =============================================================================
+# Probes the LDAPS endpoint the way a client does: what the server actually
+# presents and accepts on the wire, not what cn=config claims. Needs
+# tls.enabled; it is the only expiry watch that covers all three tls.backend
+# values - the tls-renew CronJob only exists for `backend: job`, so a
+# cert-manager or provided certificate is otherwise unwatched.
+#
+# It binds nothing and reads no Secret beyond the admin password common.sh
+# needs to write its profile: the verdict comes from the TLS handshake alone.
+tlsCheckCronJob:
+  enabled: false
+  schedule: "15 4 * * *"         # daily 04:15
+  # Fail when any certificate in the chain expires within this many days.
+  # The chain includes the client certificate when the profile has one.
+  days: 30
+
+  # Which findings fail the Job. Everything is logged either way; this only
+  # decides the exit code, which is what Kubernetes and your alerting see.
+  failOn:
+    # A certificate expired, or expires within `days`.
+    expiry: true
+    # The server still completes a TLS 1.0 or TLS 1.1 handshake (RFC 8996).
+    # Fix with tls.protocolMin, and read its note: the setting only reaches a
+    # running release through cn=config, not through `helm upgrade`.
+    obsoleteProtocols: true
+    # The chain the server presents cannot be validated from itself alone.
+    #
+    # Off by default because that is the NORMAL shape for a private CA, which
+    # is what `tls.backend: job` builds and what a cert-manager CA issuer
+    # produces: the server sends its leaf, the CA lives in ca.crt and is
+    # distributed out of band. The check trusts only what is on the wire - it
+    # deliberately ignores any local trust store - so it would be red forever.
+    # Turn it on when the issuer is public and is expected to serve a complete
+    # chain.
+    chainNotSelfValidating: false
+
+  # Anything else the probe reports - a revoked OCSP staple, an unreadable
+  # stapled response - always fails the Job. Those are never routine.
+
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
+
+# =============================================================================
 # Secrets backend for auto-generated per-user passwords
 # =============================================================================
 secrets:
