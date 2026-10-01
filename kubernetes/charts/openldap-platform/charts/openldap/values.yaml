@@ -995,6 +995,11 @@ aclLintCronJob:
 #
 # Left off, a major bump simply fails the bootstrap with a message naming both
 # versions, and the data is untouched - roll image.tag back and nothing is lost.
+# ORDER MATTERS: turn this on in one sync, move `image.tag` across the major in
+# a LATER one. The dump Job runs in the pre-upgrade phase and mounts a volume
+# that is an ordinary resource, applied in the sync phase - so the volume has to
+# come from a previous sync. Enabling it alone changes nothing: the dump Job
+# reads the running server's version and exits when the major has not moved.
 majorUpgrade:
   enabled: false
 

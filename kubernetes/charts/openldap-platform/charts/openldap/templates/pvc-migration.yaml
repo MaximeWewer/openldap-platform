@@ -17,25 +17,24 @@ metadata:
     {{- include "openldap.labels" . | nindent 4 }}
     app.kubernetes.io/component: migration
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-30"
     helm.sh/resource-policy: keep
-    # Deliberately NO hook-delete-policy.
+    # NOT a hook, deliberately.
     #
-    # `before-hook-creation` deadlocks the sync: the claim cannot go away while
-    # a Job pod still references it, and the completed dump pod is kept for its
-    # logs, so the controller sits on "waiting for deletion of hook
-    # PersistentVolumeClaim/<release>-migration" until the pod is removed by
-    # hand. ArgoCD deletes it despite `resource-policy: keep`.
+    # A hook PVC cannot carry state across a sync. Helm's
+    # `hook-delete-policy: before-hook-creation` deletes it, and removing that
+    # annotation does not help under ArgoCD, which applies its OWN default -
+    # BeforeHookCreation - to any hook that does not say otherwise. So the
+    # claim was deleted and recreated on every attempt, which both threw away
+    # the only copy of the directory and deadlocked the sync: the claim cannot
+    # go while a Job pod still references it, and the completed dump pod is
+    # kept for its logs.
     #
-    # It is also unsafe: the claim holds the ONLY copy of the directory between
-    # the dump and a verified reload. Deleting and recreating it on a retry
-    # throws that copy away - and if the retry happens after the data directory
-    # was rebuilt, the dump Job then finds the new version already serving,
-    # decides there is nothing to migrate, and clears the state. Empty tree, no
-    # dump, no state.
-    #
-    # Applying an existing claim is a no-op, so nothing needs deleting.
+    # As an ordinary resource it is created once, in the sync phase, and then
+    # simply exists. The cost is an ordering requirement: `majorUpgrade.enabled`
+    # has to be turned on in a sync BEFORE the one that moves `image.tag`
+    # across the major, so the claim is already there when the pre-upgrade dump
+    # Job needs to mount it. Enabling it costs nothing on its own - the dump Job
+    # reads the running version and exits when the major has not changed.
 spec:
   accessModes:
     - ReadWriteOnce

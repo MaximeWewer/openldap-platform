@@ -214,7 +214,15 @@ batch, so a bad file fails the whole load.
 | | bootstrap init container | Compares the major stamped on the data directory with the one it is about to run. On a change it demands a migration state naming **this** release, **this** suffix, the major it is moving **to**, and a non-empty dump - then rebuilds the directory empty. Anything else and it stops, data intact. |
 | `2` | `post-upgrade` Job `migrate-restore` | Reloads the dump, then checks the entry count and the pre-hashed passwords against the manifest. Runs before the sync Jobs (ppolicy 5, users 10, groups 15) so they reconcile on top of restored data. |
 
-### Two things to get right before running it
+### Three things to get right before running it
+
+**Enable `majorUpgrade` in its own sync first.** The dump Job runs in the
+pre-upgrade phase and mounts the migration volume, which is an ordinary
+resource applied in the sync phase - so it has to exist from an earlier sync.
+Turning the flag on by itself does nothing else: the dump Job reads the running
+server's version and exits when the major has not moved. Move `image.tag`
+across the major only once that first sync is green.
+
 
 **Use `helm upgrade --wait`.** Helm fires `post-upgrade` hooks as soon as the
 resources are applied, not when the rollout finishes. Without `--wait` the
