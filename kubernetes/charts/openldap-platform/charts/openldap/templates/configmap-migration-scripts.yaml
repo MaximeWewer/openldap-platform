@@ -139,22 +139,34 @@ data:
       sleep "${WAIT_INTERVAL_SECONDS:-3}"
     done
 
-    # The bootstrap rebuilt the tree empty. Anything else means the wipe did
-    # not happen, and restoring on top would half-merge two directories.
-    TALLY=$(openldap-cli users list 2>/dev/null | sed -n 's/^(\([0-9]*\) user.*/\1/p' | tail -1)
-    if [ -n "${TALLY:-}" ] && [ "$TALLY" -gt 0 ]; then
-      DIE "the directory already holds ${TALLY} user(s) - the data was not rebuilt, refusing to restore on top of it"
+    # What the directory holds right now decides whether a reload is needed.
+    #
+    # In HA it is often already full: the rollout replaces one pod at a time, so
+    # a rebuilt pod syncrepls the tree back from a peer that has not rolled yet -
+    # across the major, which works, the formats differ on disk and not on the
+    # wire. The data arrived by the route it was supposed to; reloading on top
+    # would be the thing that merges two directories.
+    #
+    # So: empty means restore, already-complete means verify and stop, anything
+    # in between means stop and say so.
+    openldap-cli backup data "${MIGRATION_DIR}/after.ldif" >/dev/null
+    HAVE=$(grep -c '^dn:' "${MIGRATION_DIR}/after.ldif" 2>/dev/null) || HAVE=0
+    WANT="$(state entries)"
+
+    if [ "$HAVE" -eq 0 ] || [ "$HAVE" -eq 1 ]; then
+      LOG "directory is empty (${HAVE} entries) - reloading $(grep -c '^dn:' "$DUMP") from ${DUMP}"
+      openldap-cli backup restore "$DUMP" --stop-on-error
+      openldap-cli backup data "${MIGRATION_DIR}/after.ldif" >/dev/null
+    elif [ "$HAVE" -eq "$WANT" ]; then
+      LOG "directory already holds ${HAVE} entries - replicated back from a peer during the rollout, nothing to reload"
+    else
+      DIE "the directory holds ${HAVE} entries but the dump has ${WANT} - neither empty nor complete, so it is neither a rebuild nor a finished replication; the dump is kept at ${DUMP}, reconcile by hand"
     fi
 
-    LOG "restoring $(grep -c '^dn:' "$DUMP") entries from ${DUMP}"
-    openldap-cli backup restore "$DUMP" --stop-on-error
-
-    # Verify against what the dump Job recorded, not against the dump file: the
-    # point is that the new server returns what the old one held.
-    openldap-cli backup data "${MIGRATION_DIR}/after.ldif" >/dev/null
+    # Verified either way, against what the dump Job recorded: the point is that
+    # the new server returns what the old one held.
     AFTER=$(grep -c '^dn:' "${MIGRATION_DIR}/after.ldif" 2>/dev/null) || AFTER=0
-    WANT="$(state entries)"
-    LOG "entries: ${WANT} (dumped) -> ${AFTER} (restored)"
+    LOG "entries: ${WANT} (dumped) -> ${AFTER} (now)"
     [ "$AFTER" = "$WANT" ] || DIE "entry count mismatch - the dump is still at ${DUMP}"
 
     # Only the values that were ALREADY hashed: a tree seeded by slapadd can
