@@ -249,7 +249,7 @@ openldap-cli svc passwd gitea
 
 # RootDN passwords (cn=adminconfig,cn=config OR cn=admin,dc=example,dc=org)
 # These live in slapd-config.ldif as {SSHA} hashes - rotate via config set:
-HASH=$(docker run --rm --entrypoint slappasswd cleanstart/openldap:2.6.13 -s "NEW_PASSWORD")
+HASH=$(docker run --rm --entrypoint slappasswd ghcr.io/maximewewer/openldap:2.7.1 -s "NEW_PASSWORD")
 openldap-cli config set 'olcDatabase={0}config,cn=config' olcRootPW "$HASH"
 ```
 
