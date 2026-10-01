@@ -163,18 +163,3 @@ jobs:
             | Newest upstream | `${{ steps.resolve.outputs.upstream_tag }}` |
             | Mirrored to | `ghcr.io/${{ steps.owner.outputs.lower }}/openldap:${{ steps.resolve.outputs.upstream_tag }}` |
             | Image `ldap` account | `${{ steps.ids.outputs.uid }}:${{ steps.ids.outputs.gid }}` |
-
-            ### Does this cross an OpenLDAP major?
-
-            If it does, **merging alone is not enough** and a rolling update will not work.
-
-            back-mdb's on-disk format is not compatible across a major: slapd 2.7 refuses to open a database written by 2.6, and the pod never starts. Crossing one is a dump and reload — set `majorUpgrade.enabled: true` to have the chart do it, or drive `scripts/openldap-migrate.sh` by hand. The procedure, its prerequisites and what does not survive it are in [`kubernetes/docs/migrate-2.6-to-2.7.md`](kubernetes/docs/migrate-2.6-to-2.7.md).
-
-            ### Before merging
-
-            - [ ] Checked whether the version jump crosses a major, and planned the migration if so
-            - [ ] `podSecurityContext.fsGroup` matches the gid above
-            - [ ] `make docs` re-run if the values table moved
-            - [ ] New tag is public in GHCR, or `imagePullSecrets` is configured
-
-            <sub>The `securityContext.runAsUser` / `runAsGroup` change is not cosmetic: the account baked into the image moves between majors, `/var/lib/openldap` is `0700` for it, and the chart refuses to render a mismatch rather than let slapd fail on its own volume.</sub>
