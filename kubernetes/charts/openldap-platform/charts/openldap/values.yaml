@@ -335,10 +335,40 @@ tls:
     # Secret with tls.crt, tls.key and ca.crt keys (pre-created).
     secretName: ""
 
+  # Lowest TLS version the server accepts, as slapd's olcTLSProtocolMin:
+  #   "3.3" -> TLS 1.2 (default)
+  #   "3.4" -> TLS 1.3 only
+  #   ""    -> omit the setting, inherit whatever the TLS library defaults to
+  #
+  # Left unset, the floor is the one the image's libssl happens to ship, which
+  # moves with the image - a rebuild can quietly start accepting TLS 1.0 again.
+  # Stating it pins the answer. `openldap-cli tls check` reports what is really
+  # accepted on the wire, which is the only thing that settles it.
+  protocolMin: "3.3"
+
   # Reject bind sessions below this SSF (0 disables the requirement).
+  # Raising this also applies to the sync Jobs, which bind over plain
+  # ldap:// inside the cluster.
   minSSF: 0
   # Require StartTLS or LDAPS (disallow anonymous cleartext bind).
   disallowPlainBind: false
+
+  # NOTE on the three settings above: they are written into cn=config by the
+  # bootstrap init container, which only rebuilds cn=config on a FIRST install
+  # or when the topology changes (mode, replicaCount, serverIdBase, peers,
+  # suffix, replicateConfig). Changing one of them on a running release and
+  # running `helm upgrade` does NOT reach the live server. Apply it directly:
+  #
+  #   kubectl -n <ns> exec <release>-openldap-0 -- \
+  #     ldapmodify -Y EXTERNAL -H ldapi:/// <<'EOF'
+  #   dn: cn=config
+  #   changetype: modify
+  #   replace: olcTLSProtocolMin
+  #   olcTLSProtocolMin: 3.3
+  #   EOF
+  #
+  # Keep the value in values.yaml in step, so a future re-bootstrap agrees
+  # with what is live.
 
 # =============================================================================
 # Replication - delta-syncrepl (activated automatically when mode != standalone)

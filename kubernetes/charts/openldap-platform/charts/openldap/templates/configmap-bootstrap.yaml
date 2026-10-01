@@ -482,6 +482,9 @@ data:
     olcTLSCertificateFile: /etc/openldap/certs/tls.crt
     olcTLSCertificateKeyFile: /etc/openldap/certs/tls.key
     olcTLSVerifyClient: never
+    {{- with .Values.tls.protocolMin }}
+    olcTLSProtocolMin: {{ . }}
+    {{- end }}
     {{- end }}
     {{- if gt (int .Values.tls.minSSF) 0 }}
     olcSecurity: ssf={{ .Values.tls.minSSF }}

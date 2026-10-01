@@ -385,6 +385,8 @@ openldap:
 
 **Syncrepl over TLS** - `replication.startTLS: "yes|critical"` + `replication.tlsReqcert: never|allow|try|demand` control the handshake on each `olcSyncRepl` entry. Quote `"yes"` - YAML 1.1 parses bare `yes` as boolean.
 
+**TLS floor** - `tls.protocolMin` (default `"3.3"`, TLS 1.2) writes `olcTLSProtocolMin`. Left unset the floor is whatever the image's libssl ships, which moves with the image. Like `minSSF` and `disallowPlainBind` it is written by the bootstrap init container, which only rebuilds `cn=config` on a first install or a topology change - changing it on a running release needs an `ldapmodify` on `cn=config`, see the note in `values.yaml`.
+
 ### Ingress (LDAPS only)
 
 `openldap.ingress.enabled: true` publishes LDAPS externally. Requires `tls.enabled: true` - both modes rely on SNI passthrough.

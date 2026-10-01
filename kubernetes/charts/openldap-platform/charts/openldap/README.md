@@ -315,6 +315,7 @@ Kubernetes: `>=1.27.0-0`
 | tls.job.schedule | string | `"0 4 * * 1"` |  |
 | tls.job.subjectAltNames | list | `[]` |  |
 | tls.minSSF | int | `0` |  |
+| tls.protocolMin | string | `"3.3"` |  |
 | tls.provided.secretName | string | `""` |  |
 | tolerations | list | `[]` |  |
 | topologySpreadConstraints | list | `[]` |  |

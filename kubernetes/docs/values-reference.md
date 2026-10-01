@@ -65,6 +65,7 @@ Starting overlay if you want to skim before opening the full tables.
 | `openldap.extraAcls` | `[]` | APPEND to default ACLs |
 | `openldap.tls.enabled` | `false` | Turn on before any prod use |
 | `openldap.tls.backend` | `cert-manager` | `cert-manager` \| `job` \| `provided` |
+| `openldap.tls.protocolMin` | `"3.3"` | `olcTLSProtocolMin` - `3.3` TLS 1.2, `3.4` TLS 1.3, `""` omit. Only reaches cn=config on a first install or topology change |
 | `openldap.ingress.enabled` | `false` | Only LDAPS is routed |
 | `openldap.ingress.host` | `""` | Required when ingress is enabled |
 | `openldap.backup.enabled` | `false` | Daily CronJob, PVC-backed |
