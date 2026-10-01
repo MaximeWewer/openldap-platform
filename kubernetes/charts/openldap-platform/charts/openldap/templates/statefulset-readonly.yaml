@@ -406,8 +406,15 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: data
+        # Only the stable selector labels. `openldap.labels` also carries
+        # `helm.sh/chart` and `app.kubernetes.io/version`, which move with every
+        # release - and volumeClaimTemplates is immutable, so a changed label
+        # makes the whole StatefulSet update fail with
+        #   Forbidden: updates to statefulset spec for fields other than
+        #   'replicas', 'ordinals', 'template', ... are forbidden
+        # which reads as if the template were at fault.
         labels:
-          {{- include "openldap.labels" . | nindent 10 }}
+          {{- include "openldap.selectorLabels" . | nindent 10 }}
           app.kubernetes.io/component: readonly
       spec:
         accessModes:
