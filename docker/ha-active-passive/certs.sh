@@ -88,7 +88,7 @@ action() { echo "$@"; }   # always printed (renewal/error events)
 # 101:102 both seen). Hardcoding them here makes the key unreadable to slapd
 # after a rebuild, and slapd aborts at startup on the TLS material it cannot
 # open. Read the real ids from the image; fall back to 101:102 if unavailable.
-IMAGE="cleanstart/openldap:2.6.13"
+IMAGE="ghcr.io/maximewewer/openldap:2.7.1"
 read_ldap_ids() {
   local cid tmp pw
   cid=$(docker create "$IMAGE" 2>/dev/null) || return 1

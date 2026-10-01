@@ -23,7 +23,7 @@ set -a; source .env; set +a
 : "${REPLICATE_CONFIG:=false}"
 : "${CONFIG_ADMIN_PASSWORD:=adminpasswordconfig}"
 
-IMAGE="cleanstart/openldap:2.6.13"
+IMAGE="ghcr.io/maximewewer/openldap:2.7.1"
 
 # Derive the ldap uid/gid from the image instead of hardcoding them. The
 # cleanstart/openldap tag is mutable and the ldap user's ids have changed
