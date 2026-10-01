@@ -1,0 +1,166 @@
+name: Mirror OpenLDAP image
+
+# `cleanstart/openldap` deletes tags: 2.6.13 - the version this chart shipped -
+# vanished from Docker Hub, and no other publisher builds OpenLDAP 2.7 (Alpine
+# 3.24 and edge sit on 2.6, Debian sid on 2.6.14, osixia is unmaintained). A
+# pinned upstream tag is therefore a dependency that can disappear under a
+# running deployment.
+#
+# This copies it into this repository's own GHCR namespace every week, by
+# digest and for every architecture, so the pinned tag keeps resolving whatever
+# upstream does. Re-copying an unchanged tag is a no-op; upstream rebuilds tags
+# in place, so running it on a schedule also keeps the mirror current.
+#
+# When upstream publishes a NEWER version it opens a pull request bumping the
+# references, rather than moving anyone silently onto a new major - OpenLDAP
+# 2.7 cannot even open a 2.6 database.
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'      # Mondays 04:17 UTC
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Mirror this exact upstream tag instead of the newest one'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM: cleanstart/openldap
+  # Where the chart and the Compose stacks point.
+  VALUES: kubernetes/charts/openldap-platform/charts/openldap/values.yaml
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write         # the bump commit the PR is built from
+      packages: write         # push to GHCR
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Convert repository owner to lowercase
+        id: owner
+        run: echo "lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the upstream version to mirror
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.tag }}" ]; then
+            UPSTREAM_TAG='${{ inputs.tag }}'
+          else
+            # Release tags only: drop the signature/attestation entries Docker
+            # Hub lists alongside them, the per-architecture ones, the -dev
+            # variants and `latest` - a floating tag would defeat the pinning
+            # this whole workflow exists to protect.
+            UPSTREAM_TAG=$(curl -fsSL \
+              "https://hub.docker.com/v2/repositories/${UPSTREAM}/tags?page_size=100&ordering=last_updated" \
+              | jq -r '.results[].name' \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V | tail -1)
+          fi
+          [ -n "${UPSTREAM_TAG}" ] || { echo "::error::no release tag found on ${UPSTREAM}"; exit 1; }
+
+          CURRENT=$(grep -E '^  tag: ' "${VALUES}" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+
+          echo "upstream_tag=${UPSTREAM_TAG}" >> "$GITHUB_OUTPUT"
+          echo "current_tag=${CURRENT}"       >> "$GITHUB_OUTPUT"
+          echo "Upstream newest: ${UPSTREAM_TAG} | pinned here: ${CURRENT}"
+
+      - name: Ensure skopeo is present
+        run: |
+          # Shipped on some runner images and not others; installing is cheap
+          # and removes the guesswork.
+          command -v skopeo >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq skopeo; }
+          skopeo --version
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror the pinned version
+        run: |
+          set -euo pipefail
+          DEST="ghcr.io/${{ steps.owner.outputs.lower }}/openldap"
+          # The version in use, so a rollback target never depends on upstream
+          # still having it.
+          skopeo copy --all "docker://${UPSTREAM}:${{ steps.resolve.outputs.current_tag }}" \
+                            "docker://${DEST}:${{ steps.resolve.outputs.current_tag }}" \
+            || echo "::warning::upstream no longer publishes ${{ steps.resolve.outputs.current_tag }} - the mirror keeps the copy it already has"
+
+      - name: Mirror the newest version
+        if: steps.resolve.outputs.upstream_tag != steps.resolve.outputs.current_tag
+        run: |
+          set -euo pipefail
+          DEST="ghcr.io/${{ steps.owner.outputs.lower }}/openldap"
+          skopeo copy --all "docker://${UPSTREAM}:${{ steps.resolve.outputs.upstream_tag }}" \
+                            "docker://${DEST}:${{ steps.resolve.outputs.upstream_tag }}"
+
+      - name: Read the new image's ldap uid/gid
+        id: ids
+        if: steps.resolve.outputs.upstream_tag != steps.resolve.outputs.current_tag
+        run: |
+          set -euo pipefail
+          # The account baked into the image moved between majors (2.6 ships
+          # 101:102, 2.7 ships 102:103) and /var/lib/openldap is 0700 for it,
+          # so the chart's securityContext has to move with the tag. Read it
+          # rather than assume: the runtime image is distroless, so copy
+          # /etc/passwd out of a created container.
+          docker pull -q "${UPSTREAM}:${{ steps.resolve.outputs.upstream_tag }}"
+          CID=$(docker create "${UPSTREAM}:${{ steps.resolve.outputs.upstream_tag }}")
+          docker cp "$CID":/etc/passwd /tmp/passwd
+          docker rm -f "$CID" >/dev/null
+          LINE=$(grep '^ldap:' /tmp/passwd)
+          echo "uid=$(echo "$LINE" | cut -d: -f3)" >> "$GITHUB_OUTPUT"
+          echo "gid=$(echo "$LINE" | cut -d: -f4)" >> "$GITHUB_OUTPUT"
+
+      - name: Bump the references
+        if: steps.resolve.outputs.upstream_tag != steps.resolve.outputs.current_tag
+        env:
+          OLD: ${{ steps.resolve.outputs.current_tag }}
+          NEW: ${{ steps.resolve.outputs.upstream_tag }}
+          OWNER: ${{ steps.owner.outputs.lower }}
+          NEW_UID: ${{ steps.ids.outputs.uid }}
+          NEW_GID: ${{ steps.ids.outputs.gid }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/bump-openldap-image.py
+          git diff --stat
+
+      - name: Open the bump pull request
+        if: steps.resolve.outputs.upstream_tag != steps.resolve.outputs.current_tag
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/openldap-${{ steps.resolve.outputs.upstream_tag }}
+          commit-message: "chore: bump OpenLDAP to ${{ steps.resolve.outputs.upstream_tag }}"
+          title: "chore: bump OpenLDAP to ${{ steps.resolve.outputs.upstream_tag }}"
+          delete-branch: true
+          body: |
+            `${{ env.UPSTREAM }}:${{ steps.resolve.outputs.upstream_tag }}` is now the newest
+            release upstream; this repository pins
+            `${{ steps.resolve.outputs.current_tag }}`.
+
+            It has been mirrored to
+            `ghcr.io/${{ steps.owner.outputs.lower }}/openldap:${{ steps.resolve.outputs.upstream_tag }}`
+            and the references bumped. The image's `ldap` account is
+            `${{ steps.ids.outputs.uid }}:${{ steps.ids.outputs.gid }}`, which is what
+            `securityContext.runAsUser` / `runAsGroup` were set to - the chart refuses to
+            render a mismatch, because `/var/lib/openldap` is `0700` for that account.
+
+            **Before merging, check whether this crosses an OpenLDAP major.**
+            back-mdb's on-disk format is not compatible across one: 2.7 refuses to open a
+            database written by 2.6 and the pod never starts. Crossing a major is a dump
+            and reload - `majorUpgrade.enabled`, or `scripts/openldap-migrate.sh` by hand.
+            See `kubernetes/docs/migrate-2.6-to-2.7.md`.
+
+            Also confirm `podSecurityContext.fsGroup` still matches the gid above, and
+            re-run `make docs` if the values table moved.
