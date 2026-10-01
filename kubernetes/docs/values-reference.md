@@ -81,6 +81,8 @@ Starting overlay if you want to skim before opening the full tables.
 | `openldap.groups[].ou` | `groups` | OU the group is created in; drift removal only looks in the OUs declared here |
 | `openldap.policies` | `[]` | Declarative ppolicy templates |
 | `openldap.onUserRemove` | `delete` | `delete` \| `lock` |
+| `openldap.majorUpgrade.enabled` | `false` | Automatic dump/reload when `image.tag` moves the OpenLDAP major; no-op otherwise |
+| `openldap.majorUpgrade.maxDumpAgeMinutes` | `120` | Refuse to reload a dump older than this |
 | `openldap.onOuChange` | `warn` | `warn` \| `move` \| `fail` - entry not in the OU its `ou:` declares; `move` needs CLI >= v2026.7.4 and the cn=config bind |
 | `openldap.existingBootstrapConfigMap` | `""` | Escape hatch - full bootstrap CM override |
 | `phpldapadmin.enabled` | `false` | UI subchart |

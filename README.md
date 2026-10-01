@@ -19,7 +19,7 @@ refint, ppolicy, dynlist, accesslog, syncprov) and the same
 
 Behaviours common to both platforms:
 
-- OpenLDAP on the minimal [cleanstart/openldap](https://hub.docker.com/r/cleanstart/openldap) image
+- OpenLDAP 2.7 on the minimal [cleanstart/openldap](https://hub.docker.com/r/cleanstart/openldap) image, mirrored weekly to this project's GHCR
 - Delta-syncrepl HA (accesslog + syncprov)
 - Least-privilege ACLs per OU, SSHA-hashed passwords, TLS/LDAPS
 - Idempotent bootstrap + cert renewal (Docker: cron; Kubernetes: CronJob)

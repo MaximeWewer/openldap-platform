@@ -163,8 +163,8 @@ Kubernetes: `>=1.27.0-0`
 | openldap.hpa.metrics[1].type | string | `"Resource"` |  |
 | openldap.hpa.minReplicas | int | `2` |  |
 | openldap.image.pullPolicy | string | `"IfNotPresent"` |  |
-| openldap.image.repository | string | `"cleanstart/openldap"` |  |
-| openldap.image.tag | string | `"2.6.13"` |  |
+| openldap.image.repository | string | `"ghcr.io/maximewewer/openldap"` |  |
+| openldap.image.tag | string | `"2.7.1"` |  |
 | openldap.ingress.enabled | bool | `false` |  |
 | openldap.ingress.gatewayAPI.gatewayClassName | string | `""` |  |
 | openldap.ingress.gatewayAPI.gatewayName | string | `""` |  |
@@ -230,7 +230,7 @@ Kubernetes: `>=1.27.0-0`
 | openldap.podDisruptionBudget.minAvailable | string | `""` |  |
 | openldap.podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | openldap.podLabels | object | `{}` |  |
-| openldap.podSecurityContext.fsGroup | int | `102` |  |
+| openldap.podSecurityContext.fsGroup | int | `103` |  |
 | openldap.podSecurityContext.runAsNonRoot | bool | `true` |  |
 | openldap.podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | openldap.policies | list | `[]` |  |
@@ -290,8 +290,8 @@ Kubernetes: `>=1.27.0-0`
 | openldap.securityContext.allowPrivilegeEscalation | bool | `false` |  |
 | openldap.securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | openldap.securityContext.readOnlyRootFilesystem | bool | `true` |  |
-| openldap.securityContext.runAsGroup | int | `102` |  |
-| openldap.securityContext.runAsUser | int | `101` |  |
+| openldap.securityContext.runAsGroup | int | `103` |  |
+| openldap.securityContext.runAsUser | int | `102` |  |
 | openldap.service.annotations | object | `{}` |  |
 | openldap.service.clusterIP | string | `""` |  |
 | openldap.service.enableLdapPort | bool | `true` |  |

@@ -47,12 +47,14 @@ matching feature is enabled.
 
 ## OpenLDAP image
 
-- **Runtime**: `cleanstart/openldap:2.6.13` (distroless, ~55 MB). Ships
+- **Runtime**: `ghcr.io/maximewewer/openldap:2.7.1` (distroless, ~74 MB). Ships
   slapd + back_mdb + overlays; no shell.
 - **Init**: `alpine:3.24` (~7 MB). Installs `openldap`,
   `openldap-back-mdb`, `openldap-overlay-all`, `openldap-clients` at
   runtime - the OpenLDAP version pulled from Alpine is 2.6.6, which is
-  wire-compatible with cleanstart 2.6.13 for slapadd bootstrap.
+  The image also supplies the `slapadd` that seeds the database, in two
+  init containers between the renderer and the finalizer - the on-disk
+  format is tied to the OpenLDAP major, so the loader must be the server.
 
 Test upgrading to a newer 2.6.x tag by overriding `openldap.image.tag`.
 The chart's bootstrap contract only depends on:
@@ -86,6 +88,25 @@ Pinning the CLI below that and enabling the CronJob fails the Job on an unknown
 subcommand. `onOuChange: move` needs **v2026.7.4** (`user move`,
 `entry rename --newsuperior`), and the declarative `acls` / `treeGrants` /
 `overlays` blocks need **v2026.7.4** as well.
+
+## OpenLDAP major versions
+
+`cleanstart/openldap` no longer publishes any 2.6 tag; 2.7.0 and 2.7.1 are
+what is left. 2.7 changed back-mdb's on-disk format, so a data directory
+written by 2.6 makes slapd 2.7 exit with `MDB_INVALID` - the move is a dump
+and reload, automated by `openldap.majorUpgrade.enabled` or driven by hand
+with `scripts/openldap-migrate.sh`. See
+[`migrate-2.6-to-2.7.md`](migrate-2.6-to-2.7.md).
+
+Two other 2.7 changes to know about:
+
+- `olcRefintAttribute` with several names in one value was a deprecation
+  warning in 2.6 and is a hard error in 2.7. The chart and the Compose stacks
+  already write one name per value.
+- The `cleanstart/openldap` runtime and `-dev` images disagree on the `ldap`
+  uid/gid (102:103 vs 101:102). The chart is unaffected - it runs `slapd`
+  under `securityContext.runAsUser` with its own `/run/openldap` - but the
+  Compose stacks read the uid out of the image for exactly this reason.
 
 ## Prometheus exporter
 

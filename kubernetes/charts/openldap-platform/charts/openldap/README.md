@@ -116,8 +116,8 @@ Kubernetes: `>=1.27.0-0`
 | hpa.metrics[1].type | string | `"Resource"` |  |
 | hpa.minReplicas | int | `2` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
-| image.repository | string | `"cleanstart/openldap"` |  |
-| image.tag | string | `"2.6.13"` |  |
+| image.repository | string | `"ghcr.io/maximewewer/openldap"` |  |
+| image.tag | string | `"2.7.1"` |  |
 | ingress.enabled | bool | `false` |  |
 | ingress.gatewayAPI.gatewayClassName | string | `""` |  |
 | ingress.gatewayAPI.gatewayName | string | `""` |  |
@@ -138,6 +138,16 @@ Kubernetes: `>=1.27.0-0`
 | livenessProbe.periodSeconds | int | `30` |  |
 | livenessProbe.tcpSocket.port | string | `"ldap"` |  |
 | livenessProbe.timeoutSeconds | int | `5` |  |
+| majorUpgrade.enabled | bool | `false` |  |
+| majorUpgrade.maxDumpAgeMinutes | int | `120` |  |
+| majorUpgrade.persistence.existingClaim | string | `""` |  |
+| majorUpgrade.persistence.size | string | `"2Gi"` |  |
+| majorUpgrade.persistence.storageClass | string | `""` |  |
+| majorUpgrade.resources.limits.cpu | string | `"500m"` |  |
+| majorUpgrade.resources.limits.memory | string | `"256Mi"` |  |
+| majorUpgrade.resources.requests.cpu | string | `"50m"` |  |
+| majorUpgrade.resources.requests.memory | string | `"64Mi"` |  |
+| majorUpgrade.rolloutTimeoutSeconds | int | `600` |  |
 | mode | string | `"standalone"` |  |
 | monitoring.enabled | bool | `false` |  |
 | monitoring.exporter.extraEnv | list | `[]` |  |
@@ -185,7 +195,7 @@ Kubernetes: `>=1.27.0-0`
 | podDisruptionBudget.minAvailable | string | `""` |  |
 | podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | podLabels | object | `{}` |  |
-| podSecurityContext.fsGroup | int | `102` |  |
+| podSecurityContext.fsGroup | int | `103` |  |
 | podSecurityContext.runAsNonRoot | bool | `true` |  |
 | podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | policies | list | `[]` |  |
@@ -259,8 +269,8 @@ Kubernetes: `>=1.27.0-0`
 | securityContext.capabilities.add[0] | string | `"NET_BIND_SERVICE"` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
-| securityContext.runAsGroup | int | `102` |  |
-| securityContext.runAsUser | int | `101` |  |
+| securityContext.runAsGroup | int | `103` |  |
+| securityContext.runAsUser | int | `102` |  |
 | service.annotations | object | `{}` |  |
 | service.clusterIP | string | `""` |  |
 | service.enableLdapPort | bool | `true` |  |

@@ -1,6 +1,6 @@
 # OpenLDAP Kubernetes setup
 
-A production-oriented Helm chart to deploy an **[OpenLDAP](https://openldap.org/)** server along with **[phpLDAPadmin](https://github.com/leenooks/phpLDAPadmin)** and **[Self Service Password](https://github.com/ltb-project/self-service-password)** on Kubernetes. Built on the minimal [cleanstart/openldap](https://hub.docker.com/r/cleanstart/openldap) image (OpenLDAP 2.6).
+A production-oriented Helm chart to deploy an **[OpenLDAP](https://openldap.org/)** server along with **[phpLDAPadmin](https://github.com/leenooks/phpLDAPadmin)** and **[Self Service Password](https://github.com/ltb-project/self-service-password)** on Kubernetes. Built on the minimal [cleanstart/openldap](https://hub.docker.com/r/cleanstart/openldap) image (OpenLDAP 2.7), mirrored to this project's GHCR.
 
 Day-to-day directory administration is handled by the companion CLI **[openldap-cli](https://github.com/maximewewer/openldap-cli)** - invoked from sync Jobs on `helm upgrade`, and available for ad-hoc use inside the release namespace.
 
@@ -45,7 +45,7 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
 
 ### Key features
 
-- **Minimal runtime image**: `cleanstart/openldap:2.6.13` (distroless, no shell). Alpine sidecars only for bootstrap/renew/sync operations.
+- **Minimal runtime image**: `ghcr.io/maximewewer/openldap:2.7.1` (distroless, no shell) - a weekly-refreshed mirror of `cleanstart/openldap`, which deletes tags. Alpine sidecars only for rendering, TLS renewal and sync; the `slapadd` that seeds the database comes from the server image itself.
 - **Three deployment modes**: `standalone`, `mirror` (active/passive), `multi-master` (N-way delta-syncrepl), plus optional `readOnlyReplicas` for read-heavy fan-out.
 - **Cross-cluster HA**: `replication.externalPeers` + distinct `serverIdBase` per cluster; runbook + Vagrant test rig included.
 - **Declarative administration**: `openldap.users`, `openldap.groups`, `openldap.policies` reconciled on every `helm upgrade` via post-install Jobs driving `openldap-cli`.
@@ -54,6 +54,7 @@ Day-to-day directory administration is handled by the companion CLI **[openldap-
 - **Ingress**: `ingress-nginx` SSL passthrough OR Gateway API `TLSRoute` - both for LDAPS.
 - **Backup + accesslog purge**: daily `openldap-cli backup` + weekly `openldap-cli ops accesslog-purge` CronJobs.
 - **TLS audit**: optional daily `openldap-cli tls check` CronJob - expiry, obsolete protocols and revocation probed on the wire, for all three TLS backends.
+- **Major-version upgrades**: `majorUpgrade.enabled` dumps, rebuilds and reloads the directory over LDAP when `image.tag` moves the OpenLDAP major (back-mdb's on-disk format is not compatible 2.6 -> 2.7) - and only then.
 - **Prometheus monitoring**: sidecar [openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter) + `ServiceMonitor` + baseline `PrometheusRule`.
 - **Hardened by default**: non-root, drop-all caps, read-only rootfs, seccomp `RuntimeDefault`, auto-PDB in HA, NetworkPolicy scoped to server pods.
 - **Extension points**: `extraEnv`, `extraVolumes`/`Mounts`, `sidecars`, `extraInitContainers`, `extraDeploy` on every subchart.
@@ -649,6 +650,7 @@ Operator handbook - task-oriented, deep-dive:
 | [`docs/troubleshooting.md`](docs/troubleshooting.md)       | 23 real failure modes with the exact `kubectl` diagnostic + fix     |
 | [`docs/upgrade-uninstall.md`](docs/upgrade-uninstall.md)   | Rolling upgrade, rollback caveats, keep-vs-prune Secrets, purge script |
 | [`docs/backup-restore.md`](docs/backup-restore.md)         | DR playbook, full-restore recipe, HA-aware restore                  |
+| [`docs/migrate-2.6-to-2.7.md`](docs/migrate-2.6-to-2.7.md) | OpenLDAP 2.6 -> 2.7: automatic via `majorUpgrade`, or by hand (back-mdb format change) |
 | [`docs/sizing.md`](docs/sizing.md)                         | CPU/mem/storage/mapsize formulas + MAP_FULL live-fix recipe         |
 | [`docs/migrate-from-docker.md`](docs/migrate-from-docker.md) | Move an existing `../docker/` deployment to the chart                |
 | [`docs/scaling.md`](docs/scaling.md)                       | Full-auto scale up/down: HPA, cron scaler, Prometheus-metrics-driven, PVC lifecycle |
