@@ -612,7 +612,7 @@ cli:
     repository: alpine
     tag: "3.24"
     pullPolicy: IfNotPresent
-  version: "v2026.9.1"
+  version: "v2026.10.1"
   downloadUrl: "https://github.com/maximewewer/openldap-cli/releases/download"
   kubectlVersion: "v1.36.2"
 

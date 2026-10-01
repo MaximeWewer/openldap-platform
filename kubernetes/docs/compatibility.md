@@ -66,7 +66,7 @@ Both hold across every 2.6 release.
 
 | Binary | Default version | Where |
 |--------|-----------------|-------|
-| `openldap-cli` | v2026.9.1 | `openldap.cli.version` - pinned per release for reproducibility. |
+| `openldap-cli` | v2026.10.1 | `openldap.cli.version` - pinned per release for reproducibility. |
 | `kubectl` | v1.36.2 | `openldap.cli.kubectlVersion` - used by sync/backup/tls Jobs for Secret CRUD + STS rollout. |
 
 Both downloads are checksum-verified before use: against the `checksums.txt` /
