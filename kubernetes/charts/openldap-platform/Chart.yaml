@@ -7,7 +7,7 @@ description: |
   (https://github.com/maximewewer/openldap-cli).
 type: application
 version: 2026.9.1
-appVersion: "2.6.13"
+appVersion: "2.7.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif
 keywords:
@@ -53,7 +53,7 @@ annotations:
       url: https://github.com/maximewewer/openldap-platform/blob/main/kubernetes/docs/troubleshooting.md
   artifacthub.io/images: |
     - name: openldap
-      image: cleanstart/openldap:2.6.13
+      image: ghcr.io/maximewewer/openldap:2.7.1
     - name: bootstrap-init
       image: alpine:3.24
     - name: phpldapadmin

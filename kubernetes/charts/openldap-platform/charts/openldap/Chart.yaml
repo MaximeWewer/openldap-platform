@@ -6,7 +6,7 @@ description: |
   openldap-cli.
 type: application
 version: 2026.9.1
-appVersion: "2.6.13"
+appVersion: "2.7.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif
 keywords:
