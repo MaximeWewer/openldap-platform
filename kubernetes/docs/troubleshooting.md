@@ -234,6 +234,64 @@ rolled. `kubectl rollout restart statefulset/<release>-openldap`.
   `networkPolicy.externalPeerCIDRs` OR make sure your egress firewall
   permits it.
 
+### 22. Every pod start loses ~2 minutes to the API server
+
+```
+[bootstrap] Live STS query to 10.96.0.1:443 failed - falling back to REPLICA_COUNT env=3
+```
+
+In multi-master the bootstrap reads the live `spec.replicas` off the
+StatefulSet, so an HPA scale event reaches every pod's peer list. The read is
+an optimisation and the env value is a correct fallback, so the directory is
+fine either way - but the request has to *fail* before the pod can start.
+
+Find where the time goes before changing anything:
+
+```bash
+kubectl -n <ns> logs <pod> -c bootstrap --timestamps | grep 'bootstrap\]'
+```
+
+A ~2 minute gap before the fallback line is a dropped connection paying the
+full TCP timeout. On **Cilium** the usual cause is that the API server has its
+own reserved identity: a CIDR rule never matches it, whatever the port, so the
+chart's `0.0.0.0/0:443` egress leaves it blocked. Measured on a 3-node cluster,
+same pod, same image:
+
+| egress policy                               | result          |
+| ------------------------------------------- | --------------- |
+| no NetworkPolicy                            | immediate       |
+| `ipBlock 0.0.0.0/0` port 443                | dropped, 134 s  |
+| `ipBlock 0.0.0.0/0` ports 443 + target port | dropped, 135 s  |
+| `toEntities: [kube-apiserver]`              | `replicas=3`, 0 s |
+
+Standard NetworkPolicy cannot express an identity, so restoring the read needs
+a CiliumNetworkPolicy alongside the chart's:
+
+```yaml
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openldap-apiserver
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: openldap
+      app.kubernetes.io/component: server
+  egress:
+    - toEntities: [kube-apiserver]
+```
+
+Without it the pod still starts correctly, just ~5 s later than it could
+(the call is bounded by `--connect-timeout 5`), and `replicaCount` from values
+is used instead of the live spec - which only differs if an HPA has scaled the
+StatefulSet.
+
+If the gap is elsewhere, the other candidates are `apk add curl jq` (the
+default `alpine` initImage ships neither - measured at 1 s on a healthy
+cluster) and DNS: the chart's DNS egress rule selects `k8s-app: kube-dns`, so
+a cluster whose DNS pods carry a different label needs
+`networkPolicy.extraEgress`.
+
 ## Backup / restore
 
 ### 22. Backup CronJob logs `backup data -> /backup/data_.ldif.gz` (no date)

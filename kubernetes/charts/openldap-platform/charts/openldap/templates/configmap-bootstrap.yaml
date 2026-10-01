@@ -103,10 +103,25 @@ data:
         fi
         API_TOKEN=$(cat "${SA_DIR}/token")
         API_NS=$(cat "${SA_DIR}/namespace" 2>/dev/null || echo "${NAMESPACE}")
+        # Take the endpoint from the variables kubelet injects into every
+        # container, never from a hardcoded "kubernetes.default.svc:443". Not
+        # every cluster serves the API on 443 - this chart ran against one
+        # serving it on 7443, where the hardcoded URL hit a port nothing
+        # listened on, the packets were dropped, and every pod start paid a
+        # full TCP timeout (~2 min) before falling back to the env value.
+        API_HOST="${KUBERNETES_SERVICE_HOST:-kubernetes.default.svc}"
+        API_PORT="${KUBERNETES_SERVICE_PORT_HTTPS:-${KUBERNETES_SERVICE_PORT:-443}}"
+        # Bracket a bare IPv6 literal for the URL authority.
+        case "${API_HOST}" in
+          *:*) API_HOST="[${API_HOST}]" ;;
+        esac
+        # Bounded: this call is an optimisation, the env fallback is correct.
+        # Never let it hold up a pod start.
         LIVE_REPLICAS=$(curl -sf \
+          --connect-timeout 5 --max-time 15 \
           --cacert "${SA_DIR}/ca.crt" \
           -H "Authorization: Bearer ${API_TOKEN}" \
-          "https://kubernetes.default.svc/apis/apps/v1/namespaces/${API_NS}/statefulsets/${STS_NAME}" \
+          "https://${API_HOST}:${API_PORT}/apis/apps/v1/namespaces/${API_NS}/statefulsets/${STS_NAME}" \
           2>/dev/null | jq -r '.spec.replicas // empty' 2>/dev/null)
         if [ -n "${LIVE_REPLICAS}" ] && [ "${LIVE_REPLICAS}" -gt 0 ] 2>/dev/null; then
           if [ "${LIVE_REPLICAS}" != "${REPLICA_COUNT:-}" ]; then
@@ -116,7 +131,7 @@ data:
           fi
           REPLICA_COUNT="${LIVE_REPLICAS}"
         else
-          echo "[bootstrap] Live STS query failed - falling back to REPLICA_COUNT env=${REPLICA_COUNT:-1}"
+          echo "[bootstrap] Live STS query to ${API_HOST}:${API_PORT} failed - falling back to REPLICA_COUNT env=${REPLICA_COUNT:-1}"
         fi
       else
         echo "[bootstrap] No SA token at ${SA_DIR}/token - falling back to REPLICA_COUNT env=${REPLICA_COUNT:-1}"
