@@ -6,7 +6,11 @@ description: |
   Declarative GitOps-friendly administration via openldap-cli
   (https://github.com/maximewewer/openldap-cli).
 type: application
-version: 2026.9.1
+# Advisory. The published version is computed by .github/workflows/release-helm.yml
+# from the calendar and the existing chart-v* tags (CalVer YYYY.M.PATCH), and
+# `helm package --version` overrides this field - so a release can never reuse a
+# number a consumer already pins. Kept in step with the subcharts below.
+version: 2026.10.1
 appVersion: "2.7.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif
@@ -68,14 +72,14 @@ annotations:
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
 dependencies:
   - name: openldap
-    version: 2026.9.1
+    version: 2026.10.1
     repository: "file://charts/openldap"
     condition: openldap.enabled
   - name: phpldapadmin
-    version: 2026.9.1
+    version: 2026.10.1
     repository: "file://charts/phpldapadmin"
     condition: phpldapadmin.enabled
   - name: self-service-password
-    version: 2026.9.1
+    version: 2026.10.1
     repository: "file://charts/self-service-password"
     condition: self-service-password.enabled

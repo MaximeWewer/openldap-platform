@@ -2,6 +2,11 @@ name: Release Helm Chart
 
 on:
   workflow_dispatch:
+    inputs:
+      force_version:
+        description: "Override version (format YYYY.M.X, no leading v). Empty = auto-increment."
+        required: false
+        type: string
   pull_request:
     types: [closed]
     branches: [main]
@@ -40,20 +45,49 @@ jobs:
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "owner=${OWNER_LOWER}" >> $GITHUB_OUTPUT
 
-      - name: Get chart version
+      - name: Compute chart version
         id: chart
         run: |
-          VERSION=$(grep '^version:' ${CHART_DIR}/Chart.yaml | awk '{print $2}')
+          set -euo pipefail
+          # CalVer YYYY.M.PATCH, month NOT zero-padded, computed from the
+          # calendar and the existing release tags - the same scheme the CLI
+          # repository uses. It is NOT read from Chart.yaml: a stored version
+          # only moves when someone remembers to move it, and forgetting is
+          # what republished 2026.9.1 over the artifact a production cluster
+          # pinned, swapping OpenLDAP 2.6 for 2.7 underneath it.
+          FORCE='${{ inputs.force_version }}'
+          if [ -n "$FORCE" ]; then
+            echo "$FORCE" | grep -qE '^[0-9]{4}\.[0-9]{1,2}\.[0-9]+$' \
+              || { echo "::error::force_version must be YYYY.M.X"; exit 1; }
+            VERSION="$FORCE"
+          else
+            PREFIX="chart-v$(date -u +%Y).$(date -u +%-m)."
+            LAST=$(git tag -l "${PREFIX}*" | sed "s|^${PREFIX}||" | sort -n | tail -1)
+            if [ -z "$LAST" ]; then PATCH=1; else PATCH=$((LAST + 1)); fi
+            VERSION="$(date -u +%Y).$(date -u +%-m).${PATCH}"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=chart-v${VERSION}" >> $GITHUB_OUTPUT
           echo "Releasing chart version: $VERSION"
 
-      - name: Fail early if the tag already exists
+      - name: Refuse to overwrite a published version
         run: |
-          if git rev-parse "refs/tags/${{ steps.chart.outputs.tag }}" >/dev/null 2>&1; then
-            echo "::error::Tag ${{ steps.chart.outputs.tag }} already exists - bump Chart.yaml version before re-running."
+          set -euo pipefail
+          VERSION='${{ steps.chart.outputs.version }}'
+          REPO="ghcr.io/${{ steps.lowercase.outputs.owner }}/charts/${CHART_NAME}"
+          # The registry, not a git tag: this workflow never created the
+          # `chart-v*` tags the old guard looked for, so it could never fire -
+          # and 2026.9.1 was republished over the exact artifact a production
+          # cluster pins, swapping OpenLDAP 2.6 for 2.7 underneath it.
+          #
+          # An OCI tag is mutable. Overwriting one does not "release a new
+          # version", it rewrites what every existing `targetRevision` already
+          # resolves to.
+          if helm show chart "oci://${REPO}" --version "${VERSION}" >/dev/null 2>&1; then
+            echo "::error::${REPO}:${VERSION} is already published. Overwriting it would change what every consumer pinning ${VERSION} resolves to - bump the patch in every Chart.yaml and re-run."
             exit 1
           fi
+          echo "${VERSION} is not published yet"
 
       - name: Update chart dependencies
         run: |
@@ -283,8 +317,23 @@ jobs:
 
       - name: Package Helm chart
         run: |
+          set -euo pipefail
+          # --version wins over Chart.yaml, which is what makes the computed
+          # CalVer authoritative. appVersion stays what the repository says:
+          # it tracks the OpenLDAP release, not the chart's own cadence.
           helm package ${CHART_DIR} --version ${{ steps.chart.outputs.version }}
 
       - name: Push Helm chart to GHCR
         run: |
           helm push ${CHART_NAME}-${{ steps.chart.outputs.version }}.tgz oci://ghcr.io/${{ steps.lowercase.outputs.owner }}/charts
+
+      - name: Tag the commit the release was built from
+        run: |
+          set -euo pipefail
+          # The `contents: write` permission above was granted for this and
+          # nothing was ever creating it, which is also why the old
+          # "tag already exists" guard could never fire. An OCI tag says what
+          # is published; this says which commit produced it.
+          git tag -a "${{ steps.chart.outputs.tag }}" \
+            -m "openldap-platform ${{ steps.chart.outputs.version }}"
+          git push origin "${{ steps.chart.outputs.tag }}"

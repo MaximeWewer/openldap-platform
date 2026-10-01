@@ -57,9 +57,9 @@ Kubernetes: `>=1.27.0-0`
 
 | Repository | Name | Version |
 |------------|------|---------|
-| file://charts/openldap | openldap | 2026.9.1 |
-| file://charts/phpldapadmin | phpldapadmin | 2026.9.1 |
-| file://charts/self-service-password | self-service-password | 2026.9.1 |
+| file://charts/openldap | openldap | 2026.10.1 |
+| file://charts/phpldapadmin | phpldapadmin | 2026.10.1 |
+| file://charts/self-service-password | self-service-password | 2026.10.1 |
 
 ## Values
 
