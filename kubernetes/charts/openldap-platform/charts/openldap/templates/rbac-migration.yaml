@@ -1,0 +1,65 @@
+{{- if .Values.majorUpgrade.enabled -}}
+{{- $fullName := include "openldap.fullname" . -}}
+{{- /*
+RBAC for the migration Jobs, as HOOKS.
+
+The main Role is an ordinary resource, applied in the sync phase - after the
+pre-upgrade hooks have already run. On the one upgrade that performs the
+migration, the Role in force is still the previous release's, and the dump
+Job dies AFTER taking its dump with
+
+  configmaps "<release>-migration-state" is forbidden:
+  ... cannot get resource "configmaps"
+
+which is the worst shape of failure: the work is done, the record of it is
+not. Granting the same rights through a hook closes that window.
+
+Scoped to the one ConfigMap the migration owns, on the ServiceAccount the
+chart already creates. `delete` is there because the dump Job clears a stale
+state when the major did not change, so an old state can never authorise a
+later upgrade to rebuild the data directory.
+*/ -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullName }}-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openldap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    helm.sh/hook: pre-upgrade,post-upgrade
+    helm.sh/hook-weight: "-45"
+    helm.sh/hook-delete-policy: before-hook-creation
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ $fullName }}-migration-state]
+    verbs: [get, create, patch, delete]
+  # `create` cannot be covered by a resourceNames rule - the state ConfigMap
+  # does not exist before the first migration publishes it.
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullName }}-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openldap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    helm.sh/hook: pre-upgrade,post-upgrade
+    helm.sh/hook-weight: "-45"
+    helm.sh/hook-delete-policy: before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullName }}-migration
+subjects:
+  - kind: ServiceAccount
+    name: {{ $fullName }}-sync
+    namespace: {{ .Release.Namespace }}
+{{- end }}
