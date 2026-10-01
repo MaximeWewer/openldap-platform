@@ -140,21 +140,12 @@ data:
       | sha256sum | cut -d' ' -f1)
 
     RECONCILE_MODE=0
-    if [ -f "${OK_MARKER}" ]; then
-      CURRENT_TOPO_HASH=$(cat "${TOPO_HASH_FILE}" 2>/dev/null || echo "")
-      if [ "${CURRENT_TOPO_HASH}" = "${DESIRED_TOPO_HASH}" ]; then
-        echo "[bootstrap] Marker present + topology unchanged - skipping."
-        # The rendered files stay empty, so the slapadd containers that follow
-        # are no-ops and the finalizer only re-applies ownership.
-        write_owner
-        exit 0
-      fi
-      echo "[bootstrap] Topology changed (was=${CURRENT_TOPO_HASH:-<none>} now=${DESIRED_TOPO_HASH})"
-      echo "[bootstrap] Wiping slapd.d (data preserved in ${MDB_DIR}) and re-bootstrapping."
-      rm -rf "${SLAPD_D}"/* "${OK_MARKER}" "${TOPO_HASH_FILE}" 2>/dev/null || true
-      RECONCILE_MODE=1
-    fi
-
+    # Checked BEFORE the topology marker below, not after: a major upgrade
+    # changes the image, not the topology, so the "marker present +
+    # topology unchanged" shortcut would exit first and the data directory
+    # would be handed to a slapd that cannot open it. The wipe removes the
+    # marker, so that shortcut then correctly falls through to a full
+    # bootstrap.
     # -------- Major OpenLDAP upgrade (2.6 -> 2.7): dump/reload ---------------
     # The pre-upgrade Job dumped the tree while the OLD server was still up and
     # published what it found in a ConfigMap, projected read-only at
@@ -213,6 +204,21 @@ data:
       rm -rf "${SLAPD_D}"/* "${MDB_DIR}"/* "${ACCESSLOG_DIR}"/* \
              "${OK_MARKER}" "${TOPO_HASH_FILE}" "${MAJOR_FILE}" 2>/dev/null || true
       RECONCILE_MODE=0
+    fi
+
+    if [ -f "${OK_MARKER}" ]; then
+      CURRENT_TOPO_HASH=$(cat "${TOPO_HASH_FILE}" 2>/dev/null || echo "")
+      if [ "${CURRENT_TOPO_HASH}" = "${DESIRED_TOPO_HASH}" ]; then
+        echo "[bootstrap] Marker present + topology unchanged - skipping."
+        # The rendered files stay empty, so the slapadd containers that follow
+        # are no-ops and the finalizer only re-applies ownership.
+        write_owner
+        exit 0
+      fi
+      echo "[bootstrap] Topology changed (was=${CURRENT_TOPO_HASH:-<none>} now=${DESIRED_TOPO_HASH})"
+      echo "[bootstrap] Wiping slapd.d (data preserved in ${MDB_DIR}) and re-bootstrapping."
+      rm -rf "${SLAPD_D}"/* "${OK_MARKER}" "${TOPO_HASH_FILE}" 2>/dev/null || true
+      RECONCILE_MODE=1
     fi
 
     if [ -d "${SLAPD_D}" ] && [ -n "$(ls -A ${SLAPD_D} 2>/dev/null)" ]; then
