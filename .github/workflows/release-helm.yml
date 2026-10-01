@@ -23,8 +23,8 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.merged == true
     permissions:
-      contents: write        # needed to push the chart-vX.Y.Z git tag
-      packages: write
+      contents: read
+      packages: write        # push the chart to GHCR
 
     env:
       CHART_DIR: kubernetes/charts/openldap-platform
@@ -33,8 +33,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0     # needed for tagging
 
       - name: Install Helm
         uses: azure/setup-helm@v5
@@ -44,6 +42,10 @@ jobs:
         run: |
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "owner=${OWNER_LOWER}" >> $GITHUB_OUTPUT
+
+      - name: Login to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Compute chart version
         id: chart
@@ -55,19 +57,26 @@ jobs:
           # only moves when someone remembers to move it, and forgetting is
           # what republished 2026.9.1 over the artifact a production cluster
           # pinned, swapping OpenLDAP 2.6 for 2.7 underneath it.
+          REPO="ghcr.io/${{ steps.lowercase.outputs.owner }}/charts/${CHART_NAME}"
           FORCE='${{ inputs.force_version }}'
           if [ -n "$FORCE" ]; then
             echo "$FORCE" | grep -qE '^[0-9]{4}\.[0-9]{1,2}\.[0-9]+$' \
               || { echo "::error::force_version must be YYYY.M.X"; exit 1; }
             VERSION="$FORCE"
           else
-            PREFIX="chart-v$(date -u +%Y).$(date -u +%-m)."
-            LAST=$(git tag -l "${PREFIX}*" | sed "s|^${PREFIX}||" | sort -n | tail -1)
-            if [ -z "$LAST" ]; then PATCH=1; else PATCH=$((LAST + 1)); fi
-            VERSION="$(date -u +%Y).$(date -u +%-m).${PATCH}"
+            # The patch comes from the REGISTRY, not from git tags: the registry
+            # is what consumers pin, so it is the only place that knows what has
+            # actually been released. Walk up from .1 until a version is free.
+            PREFIX="$(date -u +%Y).$(date -u +%-m)"
+            PATCH=1
+            while [ "$PATCH" -le 99 ]; do
+              helm show chart "oci://${REPO}" --version "${PREFIX}.${PATCH}" >/dev/null 2>&1 || break
+              PATCH=$((PATCH + 1))
+            done
+            [ "$PATCH" -le 99 ] || { echo "::error::no free patch left under ${PREFIX}"; exit 1; }
+            VERSION="${PREFIX}.${PATCH}"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=chart-v${VERSION}" >> $GITHUB_OUTPUT
           echo "Releasing chart version: $VERSION"
 
       - name: Refuse to overwrite a published version
@@ -75,14 +84,12 @@ jobs:
           set -euo pipefail
           VERSION='${{ steps.chart.outputs.version }}'
           REPO="ghcr.io/${{ steps.lowercase.outputs.owner }}/charts/${CHART_NAME}"
-          # The registry, not a git tag: this workflow never created the
-          # `chart-v*` tags the old guard looked for, so it could never fire -
-          # and 2026.9.1 was republished over the exact artifact a production
-          # cluster pins, swapping OpenLDAP 2.6 for 2.7 underneath it.
-          #
-          # An OCI tag is mutable. Overwriting one does not "release a new
-          # version", it rewrites what every existing `targetRevision` already
-          # resolves to.
+          # Redundant for a computed version, which is free by construction -
+          # this catches force_version. An OCI tag is mutable: overwriting one
+          # does not "release a new version", it rewrites what every existing
+          # `targetRevision` already resolves to. That is how 2026.9.1 was
+          # republished over the exact artifact a production cluster pinned,
+          # swapping OpenLDAP 2.6 for 2.7 underneath it.
           if helm show chart "oci://${REPO}" --version "${VERSION}" >/dev/null 2>&1; then
             echo "::error::${REPO}:${VERSION} is already published. Overwriting it would change what every consumer pinning ${VERSION} resolves to - bump the patch in every Chart.yaml and re-run."
             exit 1
@@ -311,10 +318,6 @@ jobs:
           sys.exit(rc)
           EOF
 
-      - name: Login to GitHub Container Registry
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-
       - name: Package Helm chart
         run: |
           set -euo pipefail
@@ -326,25 +329,3 @@ jobs:
       - name: Push Helm chart to GHCR
         run: |
           helm push ${CHART_NAME}-${{ steps.chart.outputs.version }}.tgz oci://ghcr.io/${{ steps.lowercase.outputs.owner }}/charts
-
-      - name: Tag the commit the release was built from
-        run: |
-          set -euo pipefail
-          TAG='${{ steps.chart.outputs.tag }}'
-          # An annotated tag records a tagger, and a runner has no git identity
-          # of its own - without this the step dies on
-          # "empty ident name ... not allowed". The CLI repository sidesteps it
-          # by letting action-gh-release create the tag through the API; here
-          # the tag is made locally, so the identity has to be set.
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Idempotent: the chart is pushed first, so a re-run after a failure
-          # here must be able to finish the job rather than trip over its own
-          # half-done state.
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "${TAG} already exists on the remote - nothing to do"
-            exit 0
-          fi
-          git tag -a "${TAG}" -m "openldap-platform ${{ steps.chart.outputs.version }}"
-          git push origin "${TAG}"
