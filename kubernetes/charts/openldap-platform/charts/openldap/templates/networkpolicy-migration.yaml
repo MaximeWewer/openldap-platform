@@ -1,0 +1,48 @@
+{{- if and .Values.networkPolicy.enabled .Values.majorUpgrade.enabled -}}
+{{- $fullName := include "openldap.fullname" . -}}
+{{- /*
+Lets the migration Jobs reach slapd, as a HOOK.
+
+The main NetworkPolicy already names `migration` in its allow-list, but it is
+an ordinary resource: Helm (and ArgoCD) apply it in the sync phase, AFTER the
+pre-upgrade hooks have run. So on the very upgrade that introduces the
+migration - the only one that needs it - the policy in force is still the
+previous release's, and the dump Job hangs until it gives up with
+"LDAP not reachable within 180s". It is not a connection problem, which is
+what makes it expensive to diagnose.
+
+NetworkPolicies are additive, so this one simply grants that access early and
+is harmless once the main policy catches up. Weighted below both migration
+Jobs so it is in place before either runs.
+*/ -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openldap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    helm.sh/hook: pre-upgrade,post-upgrade
+    helm.sh/hook-weight: "-40"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "openldap.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: migration
+      ports:
+        - protocol: TCP
+          port: {{ int .Values.service.ldapPort }}
+        {{- if .Values.tls.enabled }}
+        - protocol: TCP
+          port: {{ int .Values.service.ldapsPort }}
+        {{- end }}
+{{- end }}
