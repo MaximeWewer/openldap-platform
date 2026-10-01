@@ -91,7 +91,7 @@ jobs:
           skopeo --version
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -148,7 +148,7 @@ jobs:
 
       - name: Open the bump pull request
         if: steps.resolve.outputs.upstream_tag != steps.resolve.outputs.current_tag
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/openldap-${{ steps.resolve.outputs.upstream_tag }}
           commit-message: "chore: bump OpenLDAP to ${{ steps.resolve.outputs.upstream_tag }}"
