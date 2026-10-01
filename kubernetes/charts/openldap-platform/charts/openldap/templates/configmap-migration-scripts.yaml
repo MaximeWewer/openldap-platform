@@ -1,0 +1,180 @@
+{{- if .Values.majorUpgrade.enabled -}}
+{{- /*
+Scripts for the major-upgrade dump and reload.
+
+Separate from the sync ConfigMap, and a HOOK, because the dump Job runs in
+the pre-upgrade phase - before Helm (or ArgoCD) applies the chart's ordinary
+resources. A pre-upgrade Job mounting an ordinary ConfigMap reads the one
+from the PREVIOUS release, which is how the first attempt died on
+`/scripts/migrate-dump.sh: No such file or directory`.
+
+Annotated for both phases so the post-upgrade restore Job finds it too, and
+weighted below both Jobs so it is applied first.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "openldap.fullname" . }}-migration-scripts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openldap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    helm.sh/hook: pre-upgrade,post-upgrade
+    helm.sh/hook-weight: "-40"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  common.sh: |{{ include "openldap.script.common" . | nindent 4 }}
+  migrate-dump.sh: |
+    #!/bin/sh
+    set -eu
+    . /scripts/common.sh
+
+    : "${TARGET_MAJOR:?}"; : "${MIGRATION_DIR:?}"
+    STATE_CM="${RELEASE_FULLNAME}-migration-state"
+    DUMP="${MIGRATION_DIR}/data.ldif"
+
+    wait_for_ldap
+    load_config_bind
+
+    FROM_MAJOR="$(running_major || true)"
+    if [ -z "$FROM_MAJOR" ]; then
+      DIE "cannot read the running version from cn=Monitor - the monitor database must be enabled for majorUpgrade to know whether it has work to do"
+    fi
+
+    LOG "running slapd ${FROM_MAJOR}, image asks for ${TARGET_MAJOR}"
+    if [ "$FROM_MAJOR" = "$TARGET_MAJOR" ]; then
+      LOG "same major - nothing to migrate"
+      # Clear any state from an earlier migration so a later unrelated upgrade
+      # can never be matched against it.
+      kubectl -n "${RELEASE_NAMESPACE}" delete configmap "${STATE_CM}" --ignore-not-found=true >/dev/null
+      exit 0
+    fi
+
+    LOG "major change ${FROM_MAJOR} -> ${TARGET_MAJOR}: dumping before anything is rebuilt"
+    mkdir -p "${MIGRATION_DIR}"
+    openldap-cli backup data "$DUMP"
+
+    ENTRIES=$(grep -c '^dn:' "$DUMP" 2>/dev/null) || ENTRIES=0
+    PEOPLE=$(grep -ci '^objectClass: inetOrgPerson' "$DUMP" 2>/dev/null) || PEOPLE=0
+    HASHES=$(grep -c '^userPassword' "$DUMP" 2>/dev/null) || HASHES=0
+    [ "$ENTRIES" -gt 0 ] || DIE "the dump is empty - refusing to let the upgrade continue"
+    LOG "dumped ${ENTRIES} entries, ${PEOPLE} accounts, ${HASHES} userPassword values"
+
+    # The bind is the chart's own rootDN, so a hash short of the account count
+    # is not an ACL artefact - it is an account that genuinely has no password.
+    [ "$HASHES" -ge "$PEOPLE" ] || WARN "${PEOPLE} accounts but only ${HASHES} password values"
+
+    # This ConfigMap is what the bootstrap reads before it touches anything.
+    # It names the release, the suffix and both majors, so a dump belonging to
+    # some other upgrade can never authorise this one.
+    kubectl -n "${RELEASE_NAMESPACE}" create configmap "${STATE_CM}" \
+      --from-literal=release="${RELEASE_NAME}" \
+      --from-literal=from_major="${FROM_MAJOR}" \
+      --from-literal=to_major="${TARGET_MAJOR}" \
+      --from-literal=suffix="${LDAP_BASE_DN}" \
+      --from-literal=entries="${ENTRIES}" \
+      --from-literal=accounts="${PEOPLE}" \
+      --from-literal=hashes="${HASHES}" \
+      --from-literal=dumped_at="$(date -u +%s)" \
+      --dry-run=client -o yaml \
+      | kubectl label -f - --local -o yaml \
+          "app.kubernetes.io/managed-by=Helm" \
+          "app.kubernetes.io/component=migration-state" \
+          "app.kubernetes.io/part-of=openldap-platform" \
+          "openldap.platform/release=${RELEASE_NAME}" \
+      | kubectl apply -f - >/dev/null
+    LOG "migration state published as ${STATE_CM}"
+
+  # ---------------------------------------------------------------------------
+  # migrate-restore.sh - post-upgrade half. The directory has been rebuilt
+  # empty by the bootstrap; reload the dump and check it against the manifest.
+  # ---------------------------------------------------------------------------
+  migrate-restore.sh: |
+    #!/bin/sh
+    set -eu
+    . /scripts/common.sh
+
+    : "${TARGET_MAJOR:?}"; : "${MIGRATION_DIR:?}"; : "${MAX_DUMP_AGE_MINUTES:?}"
+    : "${ROLLOUT_TIMEOUT_SECONDS:?}"
+    STATE_CM="${RELEASE_FULLNAME}-migration-state"
+    DUMP="${MIGRATION_DIR}/data.ldif"
+
+    state() { kubectl -n "${RELEASE_NAMESPACE}" get configmap "${STATE_CM}" -o "jsonpath={.data.$1}" 2>/dev/null || true; }
+
+    if ! kubectl -n "${RELEASE_NAMESPACE}" get configmap "${STATE_CM}" >/dev/null 2>&1; then
+      LOG "no migration state - this upgrade did not change the OpenLDAP major"
+      exit 0
+    fi
+    TO_MAJOR="$(state to_major)"
+    if [ "$TO_MAJOR" != "$TARGET_MAJOR" ]; then
+      LOG "migration state targets ${TO_MAJOR}, this release runs ${TARGET_MAJOR} - nothing to do"
+      exit 0
+    fi
+
+    # A dump is a point in time. Reloading an old one would quietly roll the
+    # directory back to whenever it was taken, so it expires.
+    DUMPED_AT="$(state dumped_at)"
+    AGE_MIN=$(( ( $(date -u +%s) - ${DUMPED_AT:-0} ) / 60 ))
+    [ "$AGE_MIN" -le "$MAX_DUMP_AGE_MINUTES" ] \
+      || DIE "the dump is ${AGE_MIN} minutes old, over majorUpgrade.maxDumpAgeMinutes=${MAX_DUMP_AGE_MINUTES} - take a fresh one rather than roll the directory back"
+
+    [ -f "$DUMP" ] || DIE "migration state exists but there is no dump at ${DUMP}"
+
+    wait_for_ldap
+    load_config_bind
+
+    # Helm fires post-upgrade hooks as soon as the resources are applied. With
+    # no --wait the StatefulSet can still be rolling, so the Service may be
+    # answering from a pod that is STILL the old version with the old data -
+    # and restoring there would merge two directories. Wait until what answers
+    # is the version this release ships.
+    end=$(( $(date +%s) + ${ROLLOUT_TIMEOUT_SECONDS:-600} ))
+    while :; do
+      NOW_MAJOR="$(running_major || true)"
+      [ "$NOW_MAJOR" = "$TARGET_MAJOR" ] && { LOG "the Service is answering from slapd ${NOW_MAJOR}"; break; }
+      [ "$(date +%s)" -lt "$end" ] \
+        || DIE "still answering from slapd ${NOW_MAJOR:-?} after ${ROLLOUT_TIMEOUT_SECONDS:-600}s - the rollout looks stuck; the dump is kept at ${DUMP}, re-run this Job once the pods are on ${TARGET_MAJOR}"
+      LOG "  rollout in progress (serving ${NOW_MAJOR:-?}, want ${TARGET_MAJOR}) - waiting"
+      sleep "${WAIT_INTERVAL_SECONDS:-3}"
+    done
+
+    # The bootstrap rebuilt the tree empty. Anything else means the wipe did
+    # not happen, and restoring on top would half-merge two directories.
+    TALLY=$(openldap-cli users list 2>/dev/null | sed -n 's/^(\([0-9]*\) user.*/\1/p' | tail -1)
+    if [ -n "${TALLY:-}" ] && [ "$TALLY" -gt 0 ]; then
+      DIE "the directory already holds ${TALLY} user(s) - the data was not rebuilt, refusing to restore on top of it"
+    fi
+
+    LOG "restoring $(grep -c '^dn:' "$DUMP") entries from ${DUMP}"
+    openldap-cli backup restore "$DUMP" --stop-on-error
+
+    # Verify against what the dump Job recorded, not against the dump file: the
+    # point is that the new server returns what the old one held.
+    openldap-cli backup data "${MIGRATION_DIR}/after.ldif" >/dev/null
+    AFTER=$(grep -c '^dn:' "${MIGRATION_DIR}/after.ldif" 2>/dev/null) || AFTER=0
+    WANT="$(state entries)"
+    LOG "entries: ${WANT} (dumped) -> ${AFTER} (restored)"
+    [ "$AFTER" = "$WANT" ] || DIE "entry count mismatch - the dump is still at ${DUMP}"
+
+    # Only the values that were ALREADY hashed: a tree seeded by slapadd can
+    # hold cleartext, which the ppolicy overlay hashes on the way back in.
+    SRCH=$(mktemp); DSTH=$(mktemp)
+    grep '^userPassword: {' "$DUMP"                     | LC_ALL=C sort > "$SRCH"
+    grep '^userPassword: {' "${MIGRATION_DIR}/after.ldif" | LC_ALL=C sort > "$DSTH"
+    MISSING=$(LC_ALL=C comm -23 "$SRCH" "$DSTH" | grep -c .) || MISSING=0
+    rm -f "$SRCH" "$DSTH"
+    [ "$MISSING" -eq 0 ] || DIE "${MISSING} pre-hashed password(s) did not survive the reload"
+
+    LOG "migration ${TARGET_MAJOR} verified"
+    LOG "the dump is kept at ${DUMP} - it holds password hashes, remove it once the release has proven itself"
+
+  # ---------------------------------------------------------------------------
+  # tls-check.sh - probe the LDAPS endpoint the way a client does.
+  #
+  # `tls check` exits non-zero on ANY finding, and some of them are normal for
+  # a private CA. The exit code is what Kubernetes alerts on, so the findings
+  # are re-classified here and `tlsCheckCronJob.failOn` decides which ones are
+  # allowed to fail the Job. Everything is logged either way.
+  # ---------------------------------------------------------------------------
+{{- end }}

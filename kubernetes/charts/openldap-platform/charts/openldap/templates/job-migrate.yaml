@@ -115,8 +115,11 @@ spec:
               mountPath: /migration
       volumes:
         - name: scripts
+          # The migration ConfigMap, not the sync one: this Job runs in the
+          # pre-upgrade phase, where the sync ConfigMap is still the previous
+          # release's.
           configMap:
-            name: {{ $fullName }}-sync-scripts
+            name: {{ $fullName }}-migration-scripts
             defaultMode: 0555
         - name: admin-secret
           secret:
