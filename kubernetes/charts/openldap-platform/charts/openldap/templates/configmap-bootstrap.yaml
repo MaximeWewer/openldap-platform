@@ -528,6 +528,16 @@ data:
     if [ "${RECONCILE_MODE:-0}" = "1" ]; then
       SHOULD_SEED_DATA=0
     fi
+    # After a major-upgrade wipe the tree comes from the reload, or - in HA -
+    # from the peers that have not rolled yet. Seeding is what makes ordinal 0
+    # look converged while holding nothing but the seed: slapadd stamps the
+    # base entries with fresh CSNs, syncrepl compares contextCSN with a peer,
+    # finds them equal and never fetches the rest. The pod then serves a
+    # near-empty directory from behind the Service, which is worse than being
+    # down.
+    if [ "${MIGRATE_WIPE:-0}" = "1" ]; then
+      SHOULD_SEED_DATA=0
+    fi
 
     if [ "${SHOULD_SEED_DATA}" = "1" ]; then
       # Substitute replicator hash into base data (empty in standalone → the
