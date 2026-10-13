@@ -96,6 +96,81 @@ jobs:
           fi
           echo "${VERSION} is not published yet"
 
+      - name: Stamp the computed version into every Chart.yaml
+        env:
+          VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          # `helm package --version` rewrites the UMBRELLA version and nothing
+          # else, so the subcharts kept whatever their own Chart.yaml said and
+          # every resource they render carried a stale `helm.sh/chart` label -
+          # 2026.10.2 shipping pods labelled openldap-2026.10.1. Stamp all of
+          # them here, before `helm dependency update` resolves the local
+          # file:// deps, so the constraint and the subchart agree.
+          python3 - "$VERSION" <<'EOF'
+          import pathlib, re, sys
+          version = sys.argv[1]
+          root = pathlib.Path("kubernetes/charts/openldap-platform")
+
+          def set_top_level_version(path):
+              text = path.read_text()
+              out, done = [], False
+              for line in text.splitlines(keepends=True):
+                  if not done and re.match(r"^version:\s", line):
+                      line, done = f"version: {version}\n", True
+                  out.append(line)
+              assert done, f"no top-level version: in {path}"
+              path.write_text("".join(out))
+
+          set_top_level_version(root / "Chart.yaml")
+
+          # Local subchart deps only - a remote dep's version is the upstream's,
+          # not ours. Each entry is handled as a block: `version:` is listed
+          # BEFORE `repository:` here, so deciding line by line would read the
+          # version before knowing the dep is local, and skip every one.
+          chart_yaml = root / "Chart.yaml"
+          lines = chart_yaml.read_text().splitlines(keepends=True)
+
+          deps_start = next(
+              (i for i, l in enumerate(lines) if re.match(r"^dependencies:\s*$", l)),
+              None,
+          )
+          assert deps_start is not None, "no dependencies: block in the umbrella Chart.yaml"
+          deps_end = next(
+              (i for i in range(deps_start + 1, len(lines)) if re.match(r"^\S", lines[i])),
+              len(lines),
+          )
+
+          entry_starts = [
+              i for i in range(deps_start + 1, deps_end)
+              if re.match(r"^\s+-\s+name:", lines[i])
+          ]
+          patched = 0
+          for n, start in enumerate(entry_starts):
+              end = entry_starts[n + 1] if n + 1 < len(entry_starts) else deps_end
+              block = range(start, end)
+              if not any("file://" in lines[i] for i in block):
+                  continue
+              for i in block:
+                  m = re.match(r"^(\s+)version:\s", lines[i])
+                  if m:
+                      lines[i] = f"{m.group(1)}version: {version}\n"
+                      patched += 1
+                      break
+          chart_yaml.write_text("".join(lines))
+
+          subcharts = sorted(d for d in (root / "charts").iterdir() if d.is_dir())
+          for d in subcharts:
+              set_top_level_version(d / "Chart.yaml")
+
+          # A dep whose version is pinned BELOW its own entry is read before
+          # `repository:`, so `local` is still False and it is silently skipped.
+          assert patched == len(subcharts), (
+              f"stamped {patched} local dep constraints but found "
+              f"{len(subcharts)} subcharts - reorder the Chart.yaml dep keys"
+          )
+          print(f"stamped {version}: umbrella + {patched} deps + {len(subcharts)} subcharts")
+          EOF
+
       - name: Update chart dependencies
         run: |
           # Helm PREFERS charts/*.tgz over the sibling source directories, so a
