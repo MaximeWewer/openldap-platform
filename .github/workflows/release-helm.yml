@@ -23,7 +23,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.merged == true
     permissions:
-      contents: read
+      contents: write        # commit the released version back to main
       packages: write        # push the chart to GHCR
 
     env:
@@ -33,6 +33,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The `pull_request: closed` event checks out the merge ref, which is
+          # detached - the released version could not be committed back from
+          # there. Take main itself.
+          ref: main
+          # Default credentials are kept so the commit back can push; the
+          # release has no `push:` trigger, so it cannot retrigger itself.
+          persist-credentials: true
 
       - name: Install Helm
         uses: azure/setup-helm@v5
@@ -404,3 +412,23 @@ jobs:
       - name: Push Helm chart to GHCR
         run: |
           helm push ${CHART_NAME}-${{ steps.chart.outputs.version }}.tgz oci://ghcr.io/${{ steps.lowercase.outputs.owner }}/charts
+
+      # Only once the push succeeded: main should record what is actually
+      # published, never a version that failed on the way out.
+      - name: Commit the released version back to main
+        env:
+          VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Stamping at build time alone left every Chart.yaml in the repository
+          # frozen at an old number while newer charts shipped - reading the
+          # repository told you nothing about what was released.
+          git add ${CHART_DIR}/Chart.yaml ${CHART_DIR}/charts/*/Chart.yaml
+          if git diff --cached --quiet; then
+            echo "Chart.yaml already at ${VERSION} - nothing to commit."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "chore(release): openldap-platform ${VERSION}"
+          git push origin HEAD:main

@@ -6,11 +6,14 @@ description: |
   Declarative GitOps-friendly administration via openldap-cli
   (https://github.com/maximewewer/openldap-cli).
 type: application
-# Advisory. The published version is computed by .github/workflows/release-helm.yml
-# from the calendar and the existing chart-v* tags (CalVer YYYY.M.PATCH), and
-# `helm package --version` overrides this field - so a release can never reuse a
-# number a consumer already pins. Kept in step with the subcharts below.
-version: 2026.10.1
+# The last published version. Do not bump it by hand: release-helm.yml computes
+# the next free CalVer (YYYY.M.PATCH) from the registry, stamps it here, into the
+# dependency constraints below and into every subchart's Chart.yaml, then commits
+# the result back to main once the push to GHCR has succeeded. Reading this file
+# therefore tells you what is actually released - it used to sit on an old number
+# while newer charts shipped, because `helm package --version` rewrote only the
+# umbrella and only inside the build.
+version: 2026.10.2
 appVersion: "2.7.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif
@@ -72,14 +75,14 @@ annotations:
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
 dependencies:
   - name: openldap
-    version: 2026.10.1
+    version: 2026.10.2
     repository: "file://charts/openldap"
     condition: openldap.enabled
   - name: phpldapadmin
-    version: 2026.10.1
+    version: 2026.10.2
     repository: "file://charts/phpldapadmin"
     condition: phpldapadmin.enabled
   - name: self-service-password
-    version: 2026.10.1
+    version: 2026.10.2
     repository: "file://charts/self-service-password"
     condition: self-service-password.enabled
