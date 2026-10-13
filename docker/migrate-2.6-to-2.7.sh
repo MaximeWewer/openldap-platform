@@ -71,7 +71,7 @@ TARGET_MAJOR="$(printf '%s' "${TARGET_IMAGE##*:}" | cut -d. -f1,2)"
 # openldap-cli: use the one on PATH, otherwise fetch it next to this run and
 # verify it against the checksums the project publishes beside the artefact.
 # --------------------------------------------------------------------------
-CLI_VERSION="${CLI_VERSION:-v2026.10.1}"
+CLI_VERSION="${CLI_VERSION:-v2026.10.2}"
 CLI="$(command -v openldap-cli || true)"
 TMPBIN=""
 if [ -z "$CLI" ]; then
