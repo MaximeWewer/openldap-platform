@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # === Configuration ===
-IMAGE="ghcr.io/maximewewer/openldap:2.7.1"
+IMAGE="ghcr.io/maximewewer/openldap:2.7.2"
 
 # Derive the ldap uid/gid from the image instead of hardcoding them. The
 # cleanstart/openldap tag is mutable and the ldap user's ids have changed

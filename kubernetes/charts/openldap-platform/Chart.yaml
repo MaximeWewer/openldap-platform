@@ -14,7 +14,7 @@ type: application
 # while newer charts shipped, because `helm package --version` rewrote only the
 # umbrella and only inside the build.
 version: 2026.10.2
-appVersion: "2.7.1"
+appVersion: "2.7.2"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif
 keywords:
@@ -60,7 +60,7 @@ annotations:
       url: https://github.com/maximewewer/openldap-platform/blob/main/kubernetes/docs/troubleshooting.md
   artifacthub.io/images: |
     - name: openldap
-      image: ghcr.io/maximewewer/openldap:2.7.1
+      image: ghcr.io/maximewewer/openldap:2.7.2
     - name: bootstrap-init
       image: alpine:3.24
     - name: phpldapadmin

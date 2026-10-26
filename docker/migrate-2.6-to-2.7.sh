@@ -21,7 +21,7 @@
 #   docker/migrate-2.6-to-2.7.sh [--image TAG] [--yes] <stack-dir>
 #
 #   <stack-dir>   standalone | ha-active-active | ha-active-passive
-#   --image TAG   target image (default: cleanstart/openldap:2.7.1)
+#   --image TAG   target image (default: ghcr.io/maximewewer/openldap:2.7.2)
 #   --config-ldif PATH
 #                 cn=config LDIF to rebuild from. Defaults to
 #                 init-config/slapd-config.ldif, which only the standalone
@@ -39,7 +39,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED="$REPO_ROOT/scripts/openldap-migrate.sh"
 [ -x "$SHARED" ] || DIE "missing $SHARED"
 
-TARGET_IMAGE="cleanstart/openldap:2.7.1"
+TARGET_IMAGE="ghcr.io/maximewewer/openldap:2.7.2"
 ASSUME_YES="false"
 STACK=""
 CONFIG_LDIF_OVERRIDE=""
