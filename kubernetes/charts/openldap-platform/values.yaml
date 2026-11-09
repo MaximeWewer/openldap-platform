@@ -21,7 +21,7 @@ openldap:
   image:
     # Runtime image - distroless, only runs slapd.
     repository: ghcr.io/maximewewer/openldap
-    tag: "2.7.1"
+    tag: "2.7.2"
     pullPolicy: IfNotPresent
 
   # Override slapd's command / args entirely (escape hatch for exotic setups -
@@ -927,14 +927,14 @@ openldap:
     automountServiceAccountToken: false
 
   podSecurityContext:
-    fsGroup: 103
+    fsGroup: 389
     runAsNonRoot: true
     seccompProfile:
       type: RuntimeDefault
 
   securityContext:
-    runAsUser: 102
-    runAsGroup: 103
+    runAsUser: 389
+    runAsGroup: 389
     allowPrivilegeEscalation: false
     # slapd only writes to /var/lib/openldap/*, /etc/openldap/slapd.d (PVC subPaths)
     # and /run/openldap (emptyDir). Everything else can be read-only.

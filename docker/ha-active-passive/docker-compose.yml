@@ -4,7 +4,7 @@ networks:
 
 services:
   openldap:
-    image: ghcr.io/maximewewer/openldap:2.7.1
+    image: ghcr.io/maximewewer/openldap:2.7.2
     container_name: openldap
     hostname: openldap-${SERVER_ID:-1}
     restart: always
