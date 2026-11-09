@@ -16,6 +16,11 @@ keywords:
 home: https://github.com/maximewewer/openldap-platform
 sources:
   - https://github.com/maximewewer/openldap-platform
+annotations:
+  # uid:gid of the `ldap` account inside the appVersion image. Written by the
+  # mirror workflow from the image's /etc/passwd; the chart refuses to render
+  # a securityContext that disagrees (see openldap.validateRuntimeUid).
+  openldap-platform/image-ids: "389:389"
 maintainers:
   - name: maximewewer
     url: https://github.com/maximewewer

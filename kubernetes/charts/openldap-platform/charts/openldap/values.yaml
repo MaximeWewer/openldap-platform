@@ -9,10 +9,11 @@ image:
   # NOTE: `cleanstart/openldap` no longer publishes any 2.6 tag - 2.7.0 and
   # 2.7.1 are what is left, and 2.7 cannot open a database written by 2.6.
   # Moving there is a dump and reload; see `majorUpgrade` below and
-  # docs/migrate-2.6-to-2.7.md. It also changes the image's ldap account from
-  # 101:102 to 102:103, so securityContext.runAsUser / runAsGroup and
-  # podSecurityContext.fsGroup move with it - the chart refuses to render a
-  # mismatch rather than let slapd die on its own data volume.
+  # docs/migrate-2.6-to-2.7.md. The image's ldap account also gets renumbered
+  # upstream (2.6: 101:102, 2.7.2: 389:389), so securityContext.runAsUser /
+  # runAsGroup and podSecurityContext.fsGroup move with the tag - the chart
+  # refuses to render a mismatch for its default tag rather than let slapd
+  # die on its own data volume.
   repository: ghcr.io/maximewewer/openldap
   tag: "2.7.2"
   pullPolicy: IfNotPresent

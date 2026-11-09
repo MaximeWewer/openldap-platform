@@ -120,8 +120,8 @@ jobs:
         if: steps.resolve.outputs.upstream_tag != steps.resolve.outputs.current_tag
         run: |
           set -euo pipefail
-          # The account baked into the image moved between majors (2.6 ships
-          # 101:102, 2.7 ships 102:103) and /var/lib/openldap is 0700 for it,
+          # The account baked into the image gets renumbered upstream (2.6:
+          # 101:102, early 2.7: 102:103, 2.7.2: 389:389); /var/lib/openldap is 0700 for it,
           # so the chart's securityContext has to move with the tag. Read it
           # rather than assume: the runtime image is distroless, so copy
           # /etc/passwd out of a created container.

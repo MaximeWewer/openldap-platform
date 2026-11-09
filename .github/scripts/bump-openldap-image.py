@@ -8,11 +8,12 @@ block, and a careless anchor-free sed happily rewrites the CLI's own
 `version:` line instead of the image tag.
 
 The ldap uid/gid travels with the tag on purpose: the account baked into the
-image moved between OpenLDAP majors (2.6 ships 101:102, 2.7 ships 102:103) and
-/var/lib/openldap is 0700 for it, so a tag bump that leaves securityContext
+image is renumbered upstream without notice (2.6: 101:102, early 2.7: 102:103,
+2.7.2: 389:389) and /var/lib/openldap is 0700 for it, so a tag bump that leaves securityContext
 behind produces a pod that cannot read its own volume. The chart refuses to
-render that mismatch, which would turn this PR into a broken build rather than
-a broken deployment - but it is better not to open it wrong in the first place.
+render that mismatch - checked against the `openldap-platform/image-ids`
+annotation on the subchart, which this script rewrites too, so the guard can
+never lag behind the image it describes.
 """
 import os
 import re
@@ -78,6 +79,11 @@ for chart in (UMB / "Chart.yaml", SUB / "Chart.yaml"):
         # on the image name so the exporter entry beside it is left alone.
         (rf'^(\s*image: )(?:.*/)?openldap:\S+$', rf'\g<1>{MIRROR}:{NEW}'),
     ])
+
+# --- the uid guard's expectation, read by openldap.validateRuntimeUid ---------
+edit(SUB / "Chart.yaml", [
+    (r'^(  openldap-platform/image-ids: ")[^"]*(")$', rf'\g<1>{UID}:{GID}\g<2>'),
+])
 
 # --- Compose stacks, their setup/cert helpers and the docs -------------------
 pat = re.compile(rf'(?:{re.escape(UPSTREAM)}|{re.escape(MIRROR)}):{re.escape(OLD)}')

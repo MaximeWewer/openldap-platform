@@ -244,29 +244,33 @@ into `corp.example.com`. Users can override by setting
 {{- end -}}
 
 {{/*
-The `ldap` account baked into cleanstart/openldap moved between majors:
-2.6.x ships 101:102, 2.7.x ships 102:103, and /var/lib/openldap is 0700 for
-it. slapd runs under securityContext.runAsUser, so a mismatch means it cannot
-traverse into its own data volume and dies with
+The `ldap` account baked into cleanstart/openldap is not stable: it has moved
+between majors (2.6: 101:102, early 2.7: 102:103) and again within 2.7.x
+(2.7.2: 389:389), and /var/lib/openldap is 0700 for it. slapd runs under
+securityContext.runAsUser, so a mismatch means it cannot traverse into its own
+data volume and dies with
 
   olcDbDirectory: value #0: invalid path: Permission denied
 
-which reads like a storage fault rather than a uid one. Caught here instead,
-and only for the exact broken combination - a custom image or a deliberate
-uid is none of this template's business.
+which reads like a storage fault rather than a uid one. Caught here instead.
+
+The expected ids live in this chart's `openldap-platform/image-ids` annotation,
+read from the image itself by the mirror workflow on every bump - a static
+version->uid table here went stale the first time upstream renumbered within a
+minor. The check only applies to the exact tag the chart ships (appVersion):
+a custom image, another tag or a deliberate uid is none of its business.
 */}}
 {{- define "openldap.validateRuntimeUid" -}}
 {{- $known := list "cleanstart/openldap" "ghcr.io/maximewewer/openldap" -}}
-{{- if has .Values.image.repository $known -}}
-{{- $major := regexFind "^[0-9]+\\.[0-9]+" (.Values.image.tag | toString) -}}
-{{- $want := dict "2.6" (dict "uid" 101.0 "gid" 102.0) "2.7" (dict "uid" 102.0 "gid" 103.0) -}}
-{{- $exp := index $want $major -}}
-{{- if $exp -}}
-{{- $uid := .Values.securityContext.runAsUser | float64 -}}
-{{- $gid := .Values.securityContext.runAsGroup | float64 -}}
-{{- if or (ne $uid $exp.uid) (ne $gid $exp.gid) -}}
-{{- fail (printf "image %s:%s runs its ldap account as %v:%v, but securityContext.runAsUser/runAsGroup are %v:%v - /var/lib/openldap is 0700 for that account, so slapd would fail with 'olcDbDirectory: invalid path: Permission denied'. Set securityContext.runAsUser=%v, runAsGroup=%v and podSecurityContext.fsGroup=%v." .Values.image.repository .Values.image.tag $exp.uid $exp.gid $uid $gid $exp.uid $exp.gid $exp.gid) -}}
-{{- end -}}
+{{- $ids := index (.Chart.Annotations | default dict) "openldap-platform/image-ids" | default "" -}}
+{{- if and $ids (has .Values.image.repository $known) (eq (.Values.image.tag | toString) .Chart.AppVersion) -}}
+{{- $parts := splitList ":" $ids -}}
+{{- $wantUid := index $parts 0 | atoi -}}
+{{- $wantGid := index $parts 1 | atoi -}}
+{{- $uid := .Values.securityContext.runAsUser | int -}}
+{{- $gid := .Values.securityContext.runAsGroup | int -}}
+{{- if or (ne $uid $wantUid) (ne $gid $wantGid) -}}
+{{- fail (printf "image %s:%s runs its ldap account as %d:%d, but securityContext.runAsUser/runAsGroup are %d:%d - /var/lib/openldap is 0700 for that account, so slapd would fail with 'olcDbDirectory: invalid path: Permission denied'. Set securityContext.runAsUser=%d, runAsGroup=%d and podSecurityContext.fsGroup=%d." .Values.image.repository (.Values.image.tag | toString) $wantUid $wantGid $uid $gid $wantUid $wantGid $wantGid) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
