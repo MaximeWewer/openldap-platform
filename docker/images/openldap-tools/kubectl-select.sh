@@ -11,6 +11,9 @@ set -eu
 
 DIR=/usr/local/lib/kubectl
 CACHE="${TMPDIR:-/tmp}/.kubectl-server-minor"
+# Discovery/HTTP cache out of $HOME (/root): writes under /root in a running
+# container read as tampering to a runtime sensor, and the cache is per-pod.
+export KUBECACHEDIR="${KUBECACHEDIR:-${TMPDIR:-/tmp}/.kube-cache}"
 
 server_minor() {
   [ -n "${KUBECTL_MINOR:-}" ] && { echo "${KUBECTL_MINOR}"; return; }
