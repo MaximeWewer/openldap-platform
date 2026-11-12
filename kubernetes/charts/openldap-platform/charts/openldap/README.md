@@ -117,7 +117,7 @@ Kubernetes: `>=1.27.0-0`
 | hpa.minReplicas | int | `2` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/maximewewer/openldap"` |  |
-| image.tag | string | `"2.7.1"` |  |
+| image.tag | string | `"2.7.2"` |  |
 | ingress.enabled | bool | `false` |  |
 | ingress.gatewayAPI.gatewayClassName | string | `""` |  |
 | ingress.gatewayAPI.gatewayName | string | `""` |  |
@@ -195,7 +195,7 @@ Kubernetes: `>=1.27.0-0`
 | podDisruptionBudget.minAvailable | string | `""` |  |
 | podDisruptionBudget.unhealthyPodEvictionPolicy | string | `""` |  |
 | podLabels | object | `{}` |  |
-| podSecurityContext.fsGroup | int | `103` |  |
+| podSecurityContext.fsGroup | int | `389` |  |
 | podSecurityContext.runAsNonRoot | bool | `true` |  |
 | podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | policies | list | `[]` |  |
@@ -269,8 +269,8 @@ Kubernetes: `>=1.27.0-0`
 | securityContext.capabilities.add[0] | string | `"NET_BIND_SERVICE"` |  |
 | securityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | securityContext.readOnlyRootFilesystem | bool | `true` |  |
-| securityContext.runAsGroup | int | `103` |  |
-| securityContext.runAsUser | int | `102` |  |
+| securityContext.runAsGroup | int | `389` |  |
+| securityContext.runAsUser | int | `389` |  |
 | service.annotations | object | `{}` |  |
 | service.clusterIP | string | `""` |  |
 | service.enableLdapPort | bool | `true` |  |

@@ -37,6 +37,11 @@ args: []
 # for the shell work.
 #
 # `slappasswd` stays here on purpose: its {SSHA} output is version-neutral.
+#
+# ghcr.io/<owner>/openldap-init (docker/images/, rebuilt weekly) ships the
+# packages below: the bootstrap then installs nothing, and the pods need no
+# outbound access (networkPolicy.allowInitEgress can go to false). On a bare
+# alpine, `packages` is installed with apk on every first boot.
 initImage:
   repository: alpine
   tag: "3.24"
@@ -652,8 +657,12 @@ scaleSchedule: []
 
 # =============================================================================
 # openldap-cli - used by all sync Jobs (ppolicy, users, groups) as Helm
-# post-install / post-upgrade hooks. CLI + kubectl are downloaded on the fly
-# from GitHub / dl.k8s.io so no custom image build is required.
+# post-install / post-upgrade hooks, and by the CronJobs and scale watcher.
+# With cli.image = ghcr.io/<owner>/openldap-tools (docker/images/, rebuilt
+# weekly) the CLI, kubectl and curl/jq/openssl are already in the image and
+# nothing is downloaded at run time. With a bare alpine the scripts still fetch
+# them on the fly (version / kubectlVersion below) - slower, needs egress, and
+# a runtime sensor reports the downloaded binaries as container drift.
 # =============================================================================
 cli:
   image:

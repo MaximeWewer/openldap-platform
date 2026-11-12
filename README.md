@@ -43,6 +43,7 @@ Kubernetes-only additions:
 ## Companion tooling
 
 - **[openldap-cli](https://github.com/maximewewer/openldap-cli)** - single static Go binary. Day-to-day admin (users, groups, ppolicy, backup, diagnostics). Called by Docker admins directly and by the Kubernetes chart's sync Jobs.
+- **Helper images** (`docker/images/`, published weekly to GHCR) - `openldap-init` (slapd tools for the bootstrap) and `openldap-tools` (openldap-cli, kubectl for the last stable minors two apart, curl/jq/openssl). The chart's pods then install and download nothing at start; a launcher picks the kubectl matching the API server. See [docker/images/README.md](docker/images/README.md).
 - **[openldap_prometheus_exporter](https://github.com/maximewewer/openldap_prometheus_exporter)** - Prometheus scraper for `cn=Monitor`. Docker: opt-in `metrics` compose profile (`ENABLE_EXPORTER=true`); Kubernetes: sidecar in the StatefulSet + `ServiceMonitor` + baseline `PrometheusRule`.
 
 ## Quick start
@@ -85,6 +86,7 @@ openldap-platform/
 ├── docker/                         # Docker Compose recipes (standalone + 2 HA modes)
 │   ├── README.md                   # comprehensive per-mode ops handbook
 │   ├── base-ldifs/                 # shared bootstrap LDIFs (OUs, admin, policies)
+│   ├── images/                     # openldap-init + openldap-tools helper images (built weekly)
 │   ├── standalone/                 # 1 slapd container
 │   ├── ha-active-passive/          # 2 masters (MirrorMode) + consumers + HAProxy
 │   └── ha-active-active/           # N masters (multi-master) + HAProxy

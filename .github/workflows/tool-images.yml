@@ -1,0 +1,174 @@
+name: Tool images
+
+# Builds the two helper images the chart runs instead of a bare alpine:
+#
+#   openldap-init   slapd tools for the bootstrap initContainers  (initImage)
+#   openldap-tools  openldap-cli + kubectl + curl/jq/openssl      (cli.image,
+#                   for the Jobs, CronJobs and scale watcher       tls.job.image)
+#
+# With them nothing is installed or downloaded when a pod starts: no apk, no
+# GitHub / dl.k8s.io fetch, no binary written then executed in a running
+# container (which a runtime sensor rightly reports as drift).
+#
+# kubectl only supports API servers one minor away. openldap-tools carries the
+# newest stable minor M, plus M-2 and M-4: each covers its minor +/- 1, so the
+# image serves M-5 .. M+1 (seven minors) and its kubectl launcher picks the
+# right binary for the cluster it talks to.
+#
+# Every week it resolves the versions (latest patch of each of the three
+# minors, latest openldap-cli release, current alpine digest). When any of them
+# moved it rebuilds both images under a new immutable tag and opens a pull
+# request pointing the chart at it - merging that PR is what releases the
+# chart, so the chart never references an image that is not published yet.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'      # Mondays 05:17 UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild even if no version changed'
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'docker/images/**'
+      - '.github/workflows/tool-images.yml'
+
+permissions:
+  contents: read
+
+env:
+  ALPINE_VERSION: '3.24'
+  CLI_REPO: maximewewer/openldap-cli
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write         # the bump commit the PR is built from
+      packages: write         # push to GHCR
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Convert repository owner to lowercase
+        id: owner
+        run: echo "lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure skopeo is present
+        run: |
+          set -euo pipefail
+          command -v skopeo >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq skopeo; }
+
+      - name: Resolve versions
+        id: resolve
+        run: |
+          set -euo pipefail
+          STABLE=$(curl -fsSL https://dl.k8s.io/release/stable.txt)          # e.g. v1.37.2
+          M=$(echo "${STABLE}" | sed -E 's/^v1\.([0-9]+)\..*/\1/')
+          VERSIONS="${STABLE}"
+          for d in 2 4; do
+            VERSIONS="${VERSIONS} $(curl -fsSL "https://dl.k8s.io/release/stable-1.$((M - d)).txt")"
+          done
+          CLI=$(curl -fsSL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                  "https://api.github.com/repos/${CLI_REPO}/releases/latest" | jq -r .tag_name)
+          [ -n "${CLI}" ] && [ "${CLI}" != "null" ] || { echo "::error::no openldap-cli release"; exit 1; }
+          ALPINE_DIGEST=$(skopeo inspect --format '{{.Digest}}' "docker://docker.io/library/alpine:${ALPINE_VERSION}")
+          # What the images are made of. A change in any part - a kubectl or
+          # alpine patch, a CLI release, an edit under docker/images - rebuilds.
+          SOURCES=$(git ls-files -s docker/images | sha256sum | cut -c1-16)
+          FINGERPRINT=$(printf '%s|%s|%s|%s' "${ALPINE_DIGEST}" "${CLI}" "${VERSIONS}" "${SOURCES}" | sha256sum | cut -c1-32)
+          {
+            echo "kubectl_versions=${VERSIONS}"
+            echo "kubectl_newest=${STABLE}"
+            echo "cli=${CLI}"
+            echo "fingerprint=${FINGERPRINT}"
+            echo "tag=$(date -u +%Y.%m.%d)-${{ github.run_number }}"
+          } >> "$GITHUB_OUTPUT"
+          echo "kubectl: ${VERSIONS} | openldap-cli: ${CLI} | alpine ${ALPINE_VERSION}@${ALPINE_DIGEST}"
+
+      - name: Compare with the published images
+        id: compare
+        run: |
+          set -euo pipefail
+          CURRENT=$(skopeo inspect --format '{{ index .Labels "io.openldap-platform.fingerprint" }}' \
+                      "docker://ghcr.io/${{ steps.owner.outputs.lower }}/openldap-tools:latest" 2>/dev/null || true)
+          if [ "${CURRENT}" = "${{ steps.resolve.outputs.fingerprint }}" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Images already up to date (${CURRENT}) - nothing to build"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to GHCR
+        if: steps.compare.outputs.build == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.compare.outputs.build == 'true'
+        env:
+          REG: ghcr.io/${{ steps.owner.outputs.lower }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          FP: ${{ steps.resolve.outputs.fingerprint }}
+        run: |
+          set -euo pipefail
+          docker build --pull \
+            --build-arg ALPINE_VERSION="${ALPINE_VERSION}" \
+            --label io.openldap-platform.fingerprint="${FP}" \
+            -t "${REG}/openldap-init:${TAG}" -t "${REG}/openldap-init:latest" \
+            docker/images/openldap-init
+          docker build --pull \
+            --build-arg ALPINE_VERSION="${ALPINE_VERSION}" \
+            --build-arg KUBECTL_VERSIONS="${{ steps.resolve.outputs.kubectl_versions }}" \
+            --build-arg CLI_VERSION="${{ steps.resolve.outputs.cli }}" \
+            --label io.openldap-platform.fingerprint="${FP}" \
+            -t "${REG}/openldap-tools:${TAG}" -t "${REG}/openldap-tools:latest" \
+            docker/images/openldap-tools
+          # Smoke test before publishing: every bundled kubectl runs and the
+          # launcher resolves; openldap-cli and the slapd tools are present.
+          for m in $(echo "${{ steps.resolve.outputs.kubectl_versions }}" | sed -E 's/v1\.([0-9]+)\.[0-9]+/\1/g'); do
+            docker run --rm -e KUBECTL_MINOR="${m}" "${REG}/openldap-tools:${TAG}" kubectl version --client >/dev/null
+          done
+          docker run --rm "${REG}/openldap-tools:${TAG}" openldap-cli --version
+          docker run --rm "${REG}/openldap-init:${TAG}" sh -c 'command -v slappasswd && command -v slapadd && id ldap'
+          for img in openldap-init openldap-tools; do
+            docker push "${REG}/${img}:${TAG}"
+            docker push "${REG}/${img}:latest"
+          done
+
+      - name: Point the chart at the new images
+        if: steps.compare.outputs.build == 'true'
+        env:
+          OWNER: ${{ steps.owner.outputs.lower }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          CLI_VERSION: ${{ steps.resolve.outputs.cli }}
+          KUBECTL_NEWEST: ${{ steps.resolve.outputs.kubectl_newest }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/bump-tool-images.py
+          git diff --stat
+
+      - name: Open the bump pull request
+        if: steps.compare.outputs.build == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: chore/tool-images-${{ steps.resolve.outputs.tag }}
+          delete-branch: true
+          commit-message: "chore(images): openldap-init / openldap-tools ${{ steps.resolve.outputs.tag }}"
+          title: "chore(images): openldap-init / openldap-tools ${{ steps.resolve.outputs.tag }}"
+          body: |
+            Rebuilt helper images, tag `${{ steps.resolve.outputs.tag }}`:
+
+            - kubectl: `${{ steps.resolve.outputs.kubectl_versions }}` (the launcher picks the one closest to the API server)
+            - openldap-cli: `${{ steps.resolve.outputs.cli }}`
+            - alpine: `${{ env.ALPINE_VERSION }}` (current digest)
+
+            Merging releases the chart pointing at these images.
