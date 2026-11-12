@@ -87,7 +87,6 @@ jobs:
             echo "kubectl_newest=${STABLE}"
             echo "cli=${CLI}"
             echo "fingerprint=${FINGERPRINT}"
-            echo "tag=$(date -u +%Y.%m.%d)-${{ github.run_number }}"
           } >> "$GITHUB_OUTPUT"
           echo "kubectl: ${VERSIONS} | openldap-cli: ${CLI} | alpine ${ALPINE_VERSION}@${ALPINE_DIGEST}"
 
@@ -103,6 +102,14 @@ jobs:
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
+          # Tag = build date. Tags are immutable (the chart pins them): a second
+          # build the same day gets -2, -3... instead of overwriting the first.
+          BASE=$(date -u +%Y.%m.%d); TAG="${BASE}"; n=1
+          while skopeo inspect --creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+                  "docker://ghcr.io/${{ steps.owner.outputs.lower }}/openldap-tools:${TAG}" >/dev/null 2>&1; do
+            n=$((n + 1)); TAG="${BASE}-${n}"
+          done
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         if: steps.compare.outputs.build == 'true'
@@ -116,7 +123,7 @@ jobs:
         if: steps.compare.outputs.build == 'true'
         env:
           REG: ghcr.io/${{ steps.owner.outputs.lower }}
-          TAG: ${{ steps.resolve.outputs.tag }}
+          TAG: ${{ steps.compare.outputs.tag }}
           FP: ${{ steps.resolve.outputs.fingerprint }}
         run: |
           set -euo pipefail
@@ -148,7 +155,7 @@ jobs:
         if: steps.compare.outputs.build == 'true'
         env:
           OWNER: ${{ steps.owner.outputs.lower }}
-          TAG: ${{ steps.resolve.outputs.tag }}
+          TAG: ${{ steps.compare.outputs.tag }}
           CLI_VERSION: ${{ steps.resolve.outputs.cli }}
           KUBECTL_NEWEST: ${{ steps.resolve.outputs.kubectl_newest }}
         run: |
@@ -160,12 +167,12 @@ jobs:
         if: steps.compare.outputs.build == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          branch: chore/tool-images-${{ steps.resolve.outputs.tag }}
+          branch: chore/tool-images-${{ steps.compare.outputs.tag }}
           delete-branch: true
-          commit-message: "chore(images): openldap-init / openldap-tools ${{ steps.resolve.outputs.tag }}"
-          title: "chore(images): openldap-init / openldap-tools ${{ steps.resolve.outputs.tag }}"
+          commit-message: "chore(images): openldap-init / openldap-tools ${{ steps.compare.outputs.tag }}"
+          title: "chore(images): openldap-init / openldap-tools ${{ steps.compare.outputs.tag }}"
           body: |
-            Rebuilt helper images, tag `${{ steps.resolve.outputs.tag }}`:
+            Rebuilt helper images, tag `${{ steps.compare.outputs.tag }}`:
 
             - kubectl: `${{ steps.resolve.outputs.kubectl_versions }}` (the launcher picks the one closest to the API server)
             - openldap-cli: `${{ steps.resolve.outputs.cli }}`

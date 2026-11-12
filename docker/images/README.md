@@ -38,7 +38,8 @@ change under `docker/images/`):
    the published image records what it was built from), verifying every
    downloaded binary against its published checksum and smoke-testing the
    result;
-3. pushes them under an immutable tag (`YYYY.MM.DD-<run>`) and `latest`;
+3. pushes them under an immutable date tag (`YYYY.MM.DD`, then `-2`, `-3`... for a
+   second build the same day) and `latest`;
 4. opens a pull request pointing the chart values at the new tag
    (`.github/scripts/bump-tool-images.py`). Merging it releases the chart, so
    the chart never references an image that is not published.
