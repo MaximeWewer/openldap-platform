@@ -13,7 +13,7 @@ type: application
 # therefore tells you what is actually released - it used to sit on an old number
 # while newer charts shipped, because `helm package --version` rewrote only the
 # umbrella and only inside the build.
-version: 2026.10.2
+version: 2026.11.1
 appVersion: "2.7.2"
 kubeVersion: ">=1.27.0-0"
 icon: https://www.openldap.org/images/headers/LDAPlogo.gif
@@ -75,14 +75,14 @@ annotations:
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
 dependencies:
   - name: openldap
-    version: 2026.10.2
+    version: 2026.11.1
     repository: "file://charts/openldap"
     condition: openldap.enabled
   - name: phpldapadmin
-    version: 2026.10.2
+    version: 2026.11.1
     repository: "file://charts/phpldapadmin"
     condition: phpldapadmin.enabled
   - name: self-service-password
-    version: 2026.10.2
+    version: 2026.11.1
     repository: "file://charts/self-service-password"
     condition: self-service-password.enabled
