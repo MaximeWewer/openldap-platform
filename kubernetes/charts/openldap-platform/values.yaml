@@ -39,8 +39,8 @@ openldap:
   # outbound access (networkPolicy.allowInitEgress can go to false). On a bare
   # alpine, `packages` is installed with apk on every first boot.
   initImage:
-    repository: alpine
-    tag: "3.24"
+    repository: ghcr.io/maximewewer/openldap-init
+    tag: "2026.11.12"
     pullPolicy: IfNotPresent
     # Additional apk packages to install for the bootstrap (kept minimal).
     packages: "openldap openldap-clients openldap-back-mdb openldap-overlay-all"
@@ -310,8 +310,8 @@ openldap:
       # (granted by rbac-sync when tls.backend=job).
       rollingRestartOnRenew: true
       image:
-        repository: alpine
-        tag: "3.24"
+        repository: ghcr.io/maximewewer/openldap-tools
+        tag: "2026.11.12"
         pullPolicy: IfNotPresent
       resources:
         requests: { cpu: 20m, memory: 32Mi }
@@ -539,12 +539,12 @@ openldap:
   # =============================================================================
   cli:
     image:
-      repository: alpine
-      tag: "3.24"
+      repository: ghcr.io/maximewewer/openldap-tools
+      tag: "2026.11.12"
       pullPolicy: IfNotPresent
-    version: "v2026.10.2"
+    version: "v2026.11.1"
     downloadUrl: "https://github.com/maximewewer/openldap-cli/releases/download"
-    kubectlVersion: "v1.36.2"
+    kubectlVersion: "v1.37.2"
 
     # Wait for LDAP to be reachable before running sync scripts (Job startup).
     waitForLdap:
