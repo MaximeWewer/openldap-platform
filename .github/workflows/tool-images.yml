@@ -102,14 +102,9 @@ jobs:
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
-          # Tag = build date. Tags are immutable (the chart pins them): a second
-          # build the same day gets -2, -3... instead of overwriting the first.
-          BASE=$(date -u +%Y.%m.%d); TAG="${BASE}"; n=1
-          while skopeo inspect --creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
-                  "docker://ghcr.io/${{ steps.owner.outputs.lower }}/openldap-tools:${TAG}" >/dev/null 2>&1; do
-            n=$((n + 1)); TAG="${BASE}-${n}"
-          done
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          # Tag = build date, nothing else. A second build the same day
+          # overwrites that day's tag (the chart already points at it).
+          echo "tag=$(date -u +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         if: steps.compare.outputs.build == 'true'
